@@ -1,3 +1,32 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# vars file for mongodb_cis
+# =============================================================================
+# mongodb_cis — internal values. Not meant to be overridden.
+# Sources: docs/platform-notes.md (S1 install docs, S3 RPM inspection).
+# =============================================================================
+
+# Supported targets (RHEL family, verified in platform-notes).
+mongodb_cis_supported_os_majors: ["8", "9", "10"]
+mongodb_cis_supported_arch: x86_64
+
+# Official MongoDB repo (S1). Only the OS major and release series change.
+mongodb_cis_repo_baseurl: "https://repo.mongodb.org/yum/redhat/{{ ansible_facts['distribution_major_version'] }}/mongodb-org/{{ mongodb_cis_version }}/x86_64/"
+mongodb_cis_repo_gpgkey: "https://pgp.mongodb.com/server-{{ mongodb_cis_version }}.asc"
+
+# Package and service names (S1, S3).
+mongodb_cis_package: mongodb-org
+mongodb_cis_server_package: mongodb-org-server
+mongodb_cis_service: mongod
+mongodb_cis_conf_path: /etc/mongod.conf
+
+# RPM defaults (S3). Fallbacks only: live values are read from mongod.conf (D8).
+mongodb_cis_default_db_path: /var/lib/mongo
+mongodb_cis_default_log_path: /var/log/mongodb/mongod.log
+mongodb_cis_default_user: mongod
+
+# The user mongod really runs as (systemd unit User=), read in prelim; RPM default as fallback (D8).
+mongodb_cis_service_user: "{{ discovered_mongod_service['status']['User'] | default(mongodb_cis_default_user, true) }}"
+
+# Where mongod listens, from the live config (prelim). Used by the restart handler's port check.
+# First bindIp entry; 0.0.0.0 (all interfaces) is checked on 127.0.0.1.
+mongodb_cis_listen_port: "{{ discovered_mongod_conf['net']['port'] | default(27017) }}"
+mongodb_cis_listen_host: "{{ (discovered_mongod_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"

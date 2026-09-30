@@ -1,0 +1,8 @@
+---
+# Install on the control node before using the role:
+#   ansible-galaxy collection install -r requirements.yml
+# Nothing is installed on the database servers: mongodb_shell only needs mongosh,
+# which the mongodb-org package already installs.
+collections:
+  - name: community.mongodb
+    version: ">=1.8.0,<2.0.0"

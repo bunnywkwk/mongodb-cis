@@ -1,0 +1,76 @@
+---
+- name: "7.1 | AUDIT | Ensure appropriate key file permissions are set"
+  when:
+    - mongodb_cis_rule_7_1 | bool
+    - mongodb_cis_level_1 | bool
+  tags:
+    - level1
+    - manual
+    - audit
+    - rule_7.1
+    - permissions
+  vars:
+    mongodb_cis_7_1_files: >-
+      {{ [discovered_mongod_conf['security']['keyFile'] | default(''),
+          discovered_mongod_conf['net']['tls']['certificateKeyFile'] | default(''),
+          discovered_mongod_conf['net']['tls']['CAFile'] | default('')] | select | list }}
+  block:
+    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Get key and certificate files"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ mongodb_cis_7_1_files }}"
+      register: discovered_7_1_stat
+
+    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Report when none configured"
+      when: mongodb_cis_7_1_files | length == 0
+      ansible.builtin.debug:
+        msg: "7.1 NOT APPLICABLE: no keyFile, certificateKeyFile or CAFile in {{ mongodb_cis_conf_path }}."
+
+    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Report each file"
+      loop: "{{ discovered_7_1_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      ansible.builtin.debug:
+        msg: >-
+          7.1 REVIEW: {{ item.item }} is {{ item.stat.mode | default('MISSING') }}
+          {{ item.stat.pw_name | default('-') }}:{{ item.stat.gr_name | default('-') }}
+          (CIS: key files 0600, owned by {{ mongodb_cis_service_user }}).
+
+- name: "7.2 | AUDIT | Ensure appropriate database file permissions are set."
+  when:
+    - mongodb_cis_rule_7_2 | bool
+    - mongodb_cis_level_1 | bool
+  tags:
+    - level1
+    - manual
+    - audit
+    - rule_7.2
+    - permissions
+  vars:
+    mongodb_cis_7_2_db_path: "{{ discovered_mongod_conf['storage']['dbPath'] | default(mongodb_cis_default_db_path) }}"
+  block:
+    - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set. | Get dbPath permissions"
+      ansible.builtin.stat:
+        path: "{{ mongodb_cis_7_2_db_path }}"
+      register: discovered_db_path
+
+    - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set. | Report"
+      ansible.builtin.debug:
+        msg: >-
+          7.2 {{ 'PASS' if (discovered_db_path.stat.mode == '0770'
+          and discovered_db_path.stat.pw_name == mongodb_cis_service_user
+          and discovered_db_path.stat.gr_name == mongodb_cis_service_user) else 'FAIL' }}:
+          {{ mongodb_cis_7_2_db_path }} is {{ discovered_db_path.stat.mode }}
+          {{ discovered_db_path.stat.pw_name }}:{{ discovered_db_path.stat.gr_name }}
+          (expected 0770 {{ mongodb_cis_service_user }}:{{ mongodb_cis_service_user }}).
+
+    - name: "7.2 | PATCH | Ensure appropriate database file permissions are set. | Set 0770 and owner (site decision)"
+      when: mongodb_cis_fix_db_path_permissions | bool
+      ansible.builtin.file:
+        path: "{{ mongodb_cis_7_2_db_path }}"
+        state: directory
+        owner: "{{ mongodb_cis_service_user }}"
+        group: "{{ mongodb_cis_service_user }}"
+        mode: "0770"
+      tags:
+        - patch

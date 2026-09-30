@@ -1,3 +1,109 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# defaults file for mongodb_cis
+# =============================================================================
+# mongodb_cis — user-facing settings (CIS MongoDB 8 Benchmark v2.0.0)
+# Override in group_vars/host_vars; never edit tasks to change behaviour.
+# =============================================================================
+
+# --- Install (opt-in) --------------------------------------------------------
+# true = add the official MongoDB repo and install mongodb-org when missing.
+mongodb_cis_install: false
+# Release series in the repo URL: repo.mongodb.org/yum/redhat/<os>/mongodb-org/<version>/
+mongodb_cis_version: "8.0"
+
+# --- CIS levels ---------------------------------------------------------------
+# Each rule is Level 1 or Level 2 in the benchmark. For Level 2, set BOTH to true (Level 2 extends Level 1).
+mongodb_cis_level_1: true
+mongodb_cis_level_2: false
+
+# --- Safety -------------------------------------------------------------------
+# WARNING: true allows rules that can lock users out or break client connections:
+# 2.1 (enable auth), 2.2 (no localhost bypass), 4.3 (require TLS), 6.1 (change port).
+# Enable only after the admin user, TLS certificates and client configs are ready.
+mongodb_cis_disruption_high: false
+
+# --- Sections -----------------------------------------------------------------
+mongodb_cis_section1: true  # Installation and Patching
+mongodb_cis_section2: true  # Authentication
+mongodb_cis_section3: true  # Authorization
+mongodb_cis_section4: true  # Data Encryption
+mongodb_cis_section5: true  # Audit Logging
+mongodb_cis_section6: true  # Operating System Hardening
+mongodb_cis_section7: true  # File Permissions
+
+# --- Rule toggles (true = rule runs, if its section and level are also on) ---
+
+# Section 1 - Installation and Patching
+# 1.1 (L1, Manual) Ensure the appropriate MongoDB software version/patches are installed
+mongodb_cis_rule_1_1: true
+
+# Section 2 - Authentication
+# 2.1 (L1, Automated) Ensure Authentication is configured
+mongodb_cis_rule_2_1: true
+# 2.2 (L1, Automated) Ensure that MongoDB does not bypass authentication via the localhost exception
+mongodb_cis_rule_2_2: true
+# 2.3 (L2, Automated) Ensure authentication is enabled in the sharded cluster
+# Sharded clusters only; this role targets standalone mongod.
+mongodb_cis_rule_2_3: false
+
+# Section 3 - Authorization
+# 3.1 (L1, Manual) Ensure least privilege for database accounts
+mongodb_cis_rule_3_1: true
+# 3.2 (L1, Manual) Ensure that role-based access control is enabled and configured appropriately
+mongodb_cis_rule_3_2: true
+# 3.3 (L1, Manual) Ensure that MongoDB is run using a non-privileged, dedicated service account
+mongodb_cis_rule_3_3: true
+# 3.4 (L1, Manual) Ensure that each role for each MongoDB database is needed and grants only the necessary privileges
+mongodb_cis_rule_3_4: true
+# 3.5 (L2, Manual) Review Superuser/Admin Roles
+mongodb_cis_rule_3_5: true
+
+# Section 4 - Data Encryption
+# 4.1 (L2, Automated) Ensure legacy TLS protocols are disabled
+mongodb_cis_rule_4_1: true
+# 4.2 (L1, Automated) Ensure Weak Protocols are Disabled
+mongodb_cis_rule_4_2: true
+# 4.3 (L1, Automated) Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption)
+mongodb_cis_rule_4_3: true
+# 4.4 (L2, Automated) Ensure Federal Information Processing Standard (FIPS) is enabled
+# Enterprise only: reported as not available on Community.
+mongodb_cis_rule_4_4: true
+# 4.5 (L2, Manual) Ensure Encryption of Data at Rest
+# Enterprise only: reported as not available on Community.
+mongodb_cis_rule_4_5: true
+
+# Section 5 - Audit Logging
+# 5.1 (L1, Automated) Ensure that system activity is audited
+# Enterprise only: reported as not available on Community.
+mongodb_cis_rule_5_1: true
+# 5.2 (L2, Manual) Ensure that audit filters are configured properly
+# Enterprise only: reported as not available on Community.
+mongodb_cis_rule_5_2: true
+# 5.3 (L2, Automated) Ensure that logging captures as much information as possible
+mongodb_cis_rule_5_3: true
+# 5.4 (L2, Automated) Ensure that new entries are appended to the end of the log file
+mongodb_cis_rule_5_4: true
+
+# Section 6 - Operating System Hardening
+# 6.1 (L1, Automated) Ensure that MongoDB uses a non-default port
+mongodb_cis_rule_6_1: true
+# Site value for 6.1 (CIS: "Organisation Defined port"). No default is invented: set it, or 6.1 stops with a message.
+# WARNING: changing the port breaks every client and connection string that uses 27017. Also gated by disruption_high.
+# Must be 1024-65535 (mongod runs as a non-root user and cannot bind lower ports).
+mongodb_cis_port: ""
+# 6.2 (L2, Manual) Ensure that operating system resource limits are set for MongoDB
+mongodb_cis_rule_6_2: true
+# 6.3 (L2, Manual) Ensure that server-side scripting is disabled if not needed
+mongodb_cis_rule_6_3: true
+# Site decision (D20): false = your apps do NOT use server-side JavaScript ($where, mapReduce, $function, $accumulator)
+# -> the role sets security.javascriptEnabled: false. Default true = report only.
+# WARNING: CIS impact: "Disabling server-side scripting will block all server-side scripts from executing."
+mongodb_cis_javascript_needed: true
+
+# Section 7 - File Permissions
+# 7.1 (L1, Manual) Ensure appropriate key file permissions are set
+mongodb_cis_rule_7_1: true
+# 7.2 (L1, Manual) Ensure appropriate database file permissions are set.
+mongodb_cis_rule_7_2: true
+# Site decision (D20): true = also FIX the dbPath directory to 0770, owner/group = mongod user.
+# Default false = report only (CIS marks 7.2 Manual). The RPM ships the directory as 0755.
+mongodb_cis_fix_db_path_permissions: false

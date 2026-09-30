@@ -80,7 +80,7 @@ Chosen with the user on 2026-09-29 (RHEL 8 added the same day).
 
 ## D8. Paths come from the live config, not from the docs
 
-- **Decision:** `dbPath`, the log path and the service user are read from `mongod.conf` and the systemd unit. The package defaults (`/var/lib/mongo`, `/var/log/mongodb/mongod.log`, `mongod`) are used only as fallbacks in `vars/main.yml`.
+- **Decision:** `dbPath`, the log path and the service user are read from `mongod.conf` and the systemd unit. The user comes from prelim's read-only `systemd_service` call (`status.User`) → `mongodb_cis_service_user`. The package defaults (`/var/lib/mongo`, `/var/log/mongodb/mongod.log`, `mongod`) are used only as fallbacks in `vars/main.yml`.
 - **Why:** the MongoDB install page and the RHEL package disagree. The docs say user `mongodb` and `/var/lib/mongodb`; the RPM uses `mongod` and `/var/lib/mongo`. Sites may also move `dbPath`.
 - **Evidence:** S1 vs S3 (see platform-notes, "The docs and the package disagree").
 
@@ -112,7 +112,7 @@ These are reported, not hidden, so an auditor sees the gap and the reason.
   - Without MongoDB's module, `mongod` is `unconfined_service_t`, so SELinux does not block the new port.
   - With the module, the new port must first be labelled `mongod_port_t`, or `mongod` will not start.
   - Firewalld needs the new port opened either way.
-- **Status:** to be tested under SELinux enforcing on the VMs before the PATCH is written.
+- **Status:** PATCH written 2026-09-30 (assert 1024–65535 and ≠ 27017; `net.port` merged; handler waits on the new port). With the default SELinux state (`mongod` unconfined) no port label is needed; the optional SELinux extra (D17) will label it. Firewall stays site policy (bindIp is `127.0.0.1` by default, so no firewall change is needed). **VM test under enforcing still pending.**
 
 ## D12. Install is opt-in
 
@@ -120,13 +120,30 @@ These are reported, not hidden, so an auditor sees the gap and the reason.
 - **Why:** the role's job is hardening. Installing must be a deliberate choice, and it is needed now only because the test VMs are empty.
 - **Evidence:** S1 repo definition and install command. CLAUDE.md "Application roles: Install is opt-in".
 
-## D13. Talking to the database (rules 2.1, 3.x): `mongosh`, not pymongo
+## D13. Talking to the database (rules 2.1, 3.x): `community.mongodb.mongodb_shell`
 
-- **Decision:** database reads use `ansible.builtin.command: mongosh --quiet --eval '<JSON-returning query>'` with `changed_when: false` and `check_mode: false`. The output is parsed with `from_json`. Credentials are variables, and every task that uses them has `no_log: true`. The optional admin bootstrap for 2.1 also uses `mongosh`, with `changed_when` computed from its output.
-- **Why:**
-  - `mongosh` is installed by `mongodb-org` on every RHEL version (S1). pymongo is **missing on EL8**, 3.10 on EL9 and 4.8 on EL10 (platform-notes, S8), so the `community.mongodb` modules would need a per-OS driver install. That is exactly the kind of variance to avoid.
-  - `mongosh` also matches how CIS writes the audits (S6 uses shell and config-file checks).
-- **Revised:** earlier this doc preferred `community.mongodb`. It changed after checking EPEL 8/9 (S8).
+- **Decision:**
+  - Database reads and the 2.1 admin bootstrap use **`community.mongodb.mongodb_shell`**, with `changed_when: false` and `check_mode: false` on read-only queries. Credentials are variables with `no_log: true`.
+  - The collection's **pymongo-based** modules (`mongodb_user`, `mongodb_info`, `mongodb_parameter`, ...) are **not** used.
+- **Why this module:**
+  - Mentor's rule: prefer a real module over `command`/`shell`.
+  - `mongodb_shell` (collection 1.8.0) lists only `requirements: mongosh`. The pymongo import in its `module_utils` is optional (`try/except ImportError`).
+  - `mongosh` is installed by `mongodb-org` on RHEL 8/9/10 (S1), so there's **nothing extra on the database servers**. The collection is installed on the control node only (`requirements.yml`).
+  - Its code parses as Python 3.6 (static check), so it's expected to work on RHEL 8 via the 2.16 env. **To confirm with one real run.**
+  - It declares `supports_check_mode=False`, so read-only queries set `check_mode: false` (they only read). It reports `changed` by default, so reads set `changed_when: false`.
+- **Why not the pymongo modules** (checked 2026-09-30):
+  - The collection README says: *"PyMongo - latest version supported only."* Latest pymongo = **4.18.2, `requires_python >=3.9`** (PyPI).
+  - RHEL 8's **system** Python 3.6 can't run it (it would need a separate `python3.12` venv on the server). RHEL 9 EPEL = pymongo 3.10.1 (2020); RHEL 10 EPEL = 4.8.0 → neither is "latest". EPEL itself isn't in the base repos (S8).
+  - **Benefit is small:** mapped against all 23 rules, the pymongo modules would only simplify 2.1's user creation (`mongodb_user`) and the 3.1–3.5 reports (`mongodb_info`). The other ~17 rules are `mongod.conf` keys, a startup-only parameter (2.2), systemd or file permissions, which the collection has no module for. Its `mongodb_config`/`mongodb_mongod` roles template the whole file (conflicts with D7).
+  - **Cost is on every DB server:** a Python 3.9+ venv with pymongo, PyPI/internet access (or an internal mirror), per-task `ansible_python_interpreter`, and keeping pymongo at "latest". That adds software and supply-chain surface to the servers being hardened.
+  - **Would reconsider if** the organisation already has an internal PyPI mirror and allows pip-installed software on DB servers.
+- **Confirmed** by the user on 2026-09-30 after comparing all three options (`command` / `mongodb_shell` / full pymongo modules). Chosen for clean code (a module, not `command`) with **no extra software on the servers being hardened**.
+  - Making them work would need EPEL or `pip install` into system Python on every DB server (mixing pip with RPM Python), and still fails on RHEL 8.
+  - Running them from the control node instead needs mongod reachable over the network, but it binds `127.0.0.1` by default. Exposing it would weaken the hardening.
+- **Config-file rules are unaffected:** the collection has no module to edit individual `mongod.conf` keys, so 2.2/4.x/5.x/6.1 stay `copy`/`stat` (D7). 2.2's `enableLocalhostAuthBypass` is startup-only (S4), so `mongodb_parameter` couldn't set it anyway.
+- **Revised (twice):**
+  1. First `community.mongodb` pymongo modules → dropped after checking EPEL (S8).
+  2. Then `ansible.builtin.command: mongosh` → replaced by `mongodb_shell` on 2026-09-30 to follow the mentor's no-`command` rule.
 
 ## D14. What the CIS spreadsheet (S6) tells us about AUDIT steps
 
@@ -205,11 +222,80 @@ S5 "Profile Definitions": Level 2 *"extends the 'Level 1 - MongoDB' profile"*. S
 - **Profiles expressed with variables:**
   - Level 1 profile (default): `level_1: true`, `level_2: false`.
   - Level 2 profile: `level_1: true`, `level_2: true`.
-  - `level_1: false`, `level_2: true` would run L2 rules without their base, which CIS does not define. `prelim.yml` warns about it.
+  - `level_1: false`, `level_2: true` runs L2 rules without their base, which CIS does not define. The README documents it; there is no runtime warning (removed as unnecessary, user decision 2026-09-29).
 
 **Why it differs from Lockdown:**
 - We don't use Goss (see "Not adopted"). A level variable that changes nothing would mislead users; the exact misunderstanding L4 shows is easy to have.
-- Default **Level 1 only:** S5 defines Level 1 as *"practical and prudent"* and not limiting utility, and Level 2 as for environments *"where security is paramount"*. Lockdown enables both by default; we choose the CIS baseline and make Level 2 an explicit choice. Confirm with the mentor.
+- Default **Level 1 only:** S5 defines Level 1 as *"practical and prudent"* and not limiting utility, and Level 2 as for environments *"where security is paramount"*. Lockdown enables both by default; we choose the CIS baseline and make Level 2 an explicit choice.
+- **Confirmed** by the user on 2026-09-29, after comparing it with pure Lockdown (tags only, no level vars): keep vars that gate rules, plus tags. Everything else matches Lockdown: section switches, rule toggles, level tags, `disruption_high`, AUDIT → PATCH.
+
+## D19. Every user switch in a condition gets `| bool`
+
+**In plain words:**
+- When you type `-e mongodb_cis_install=false` on the command line, Ansible receives the **text** `"false"`, not the value *false*. AWX/Tower surveys do the same.
+- Text that isn't empty counts as "yes", so without `| bool`, "false" can mean **true**.
+- `| bool` turns the text back into a real yes/no: `"true"`/`"yes"`/`true` → true, `"false"`/`"no"`/`false` → false.
+- It is **not** about `--check`; it's about where the value comes from. Values from `defaults/` or `group_vars` YAML are already real booleans, and `| bool` leaves them unchanged. So it's never harmful, and it protects every way a user can set a switch.
+
+**Evidence 1: the real error** (2026-09-30, RHEL 10 install test, ansible-core 2.20.7, T-M4):
+```
+[ERROR]: Task failed: Conditional result (True) was derived from value of type 'str' at "<CLI option '-e'>". Conditionals must have a boolean result.
+Origin: .../mongodb_cis/tasks/prelim.yml:39:9
+39   when: mongodb_cis_install
+```
+
+**Evidence 2: the silent danger on 2.16.** A debug-only playbook on localhost, `when: mongodb_cis_install` vs `when: mongodb_cis_install | bool`:
+
+| ansible-core | `-e mongodb_cis_install=` | Without `\| bool` | With `\| bool` |
+|--------------|---------------------------|--------------------|-----------------|
+| 2.20.7 (RHEL 9/10 env) | `true` | ❌ run stops with the error above | ✅ runs |
+| 2.20.7 | `false` | ❌ run stops with the error above | ✅ skipped |
+| 2.16.x (RHEL 8 env) | `true` | ⚠️ runs, only a deprecation warning | ✅ runs |
+| 2.16.x | `false` | 🚨 **runs**: printed `INSTALL WOULD RUN (value=false, type=str)` | ✅ skipped |
+
+So without `| bool`, 2.20 breaks loudly, and 2.16 does **the opposite of what the user asked**, silently. In a hardening role, that could mean a disruptive rule running when someone explicitly set it to `false`.
+
+**Evidence 3: where the value comes from decides everything.** Same debug-only test, `flag: false`, **no `-e`**:
+
+| Source of `flag` | 2.20.7 without `\| bool` | 2.16.19 without `\| bool` | Either version with `\| bool` |
+|------------------|---------------------------|----------------------------|--------------------------------|
+| YAML (`defaults/`, `group_vars/*.yml`, `inventory.yml`) | ✅ skipped | ✅ skipped | ✅ skipped |
+| INI inventory (`flag=false` in `inventory.ini`) | ❌ run stops | 🚨 **runs** (`flag=false, type=str`) | ✅ skipped |
+
+So `| bool` changes **nothing** for real YAML booleans. It only matters when the value arrives as **text**:
+- `-e key=value`
+- INI inventories
+- AWX/Tower surveys and extra vars
+- quoted YAML (`"false"`)
+
+**What the references say:**
+- Ansible docs, *Conditionals based on variables*: *"you must apply the `| bool` filter to non-boolean variables, such as string variables with content like 'yes', 'on', '1', or 'true'."*
+- ansible-core 2.19 porting guide: non-boolean conditionals now fail (*"Conditionals must have a boolean result"*). Before, truthy strings *"masked serious logic errors."*
+- **Lockdown RHEL9-CIS uses `| bool` nowhere** (0 matches in `tasks/`). It expects users to give real YAML booleans. **This is a deliberate deviation from Lockdown.**
+
+**Decision:** every user-facing switch used in a `when:` (install, levels, sections, rule toggles, `disruption_high`) is written `<var> | bool`. Internal facts the role sets itself (`discovered_*`) don't need it.
+
+**Why deviate from Lockdown here:**
+- This role is run by **two** ansible-core generations (2.16 for RHEL 8, 2.20 for RHEL 9/10), and they fail in opposite ways (silent wrong run vs hard stop).
+- `| bool` costs nothing for correct input and makes a hardening toggle mean exactly what the user wrote, whatever the input source.
+
+## D20. Manual rules: report by default, optional "site decision" variable where CIS gives one clear fix
+
+- **Decision:**
+  - Manual rules stay report-only by default (D4).
+  - A site may declare its decision with a variable **only where the benchmark gives one clear remediation**:
+    - 6.3: `mongodb_cis_javascript_needed: true` by default. `false` → PATCH `security.javascriptEnabled: false`.
+    - 7.2: opt-in permission fix.
+  - All other Manual rules stay report-only:
+    - 3.x: which users and roles are right is site-specific.
+    - 1.1: never auto-upgrade.
+    - 6.2: the shipped unit is already compliant.
+    - 7.1: no keyFile on standalone.
+    - 4.5, 5.2: Enterprise-only.
+- **Why:**
+  - CIS marks a rule Manual because *"the expected state can vary depending on the environment"* (S5, Assessment Status).
+  - A variable set by the site is the site's decision, not the role guessing (CLAUDE.md principle 5 still holds).
+- **Status:** agreed 2026-09-30. 7.2 built (`mongodb_cis_fix_db_path_permissions`); 6.3 comes with Section 6.
 
 ## Not adopted
 

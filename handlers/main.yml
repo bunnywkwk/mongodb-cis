@@ -1,3 +1,13 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# handlers file for mongodb_cis
+- name: Restart mongod service
+  listen: Restart mongod
+  ansible.builtin.systemd_service:
+    name: "{{ mongodb_cis_service }}"
+    state: restarted
+
+- name: Wait for mongod to accept connections
+  listen: Restart mongod
+  ansible.builtin.wait_for:
+    host: "{{ mongodb_cis_listen_host }}"
+    port: "{{ mongodb_cis_listen_port | int }}"
+    timeout: 60

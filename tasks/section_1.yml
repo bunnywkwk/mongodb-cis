@@ -1,0 +1,16 @@
+---
+- name: "1.1 | AUDIT | Ensure the appropriate MongoDB software version/patches are installed"
+  when:
+    - mongodb_cis_rule_1_1 | bool
+    - mongodb_cis_level_1 | bool
+  tags:
+    - level1
+    - manual
+    - audit
+    - rule_1.1
+    - patching
+  ansible.builtin.debug:
+    msg: >-
+      1.1 REVIEW: installed MongoDB server {{ discovered_mongodb_version }}. Compare with the latest
+      {{ mongodb_cis_version }}.x release and the security alerts at https://www.mongodb.com/alerts.
+      The role never upgrades automatically.

@@ -1,0 +1,25 @@
+---
+- name: "INSTALL | PATCH | Import the MongoDB package signing key"
+  ansible.builtin.rpm_key:
+    key: "{{ mongodb_cis_repo_gpgkey }}"
+    state: present
+
+- name: "INSTALL | PATCH | Add the official MongoDB repository"
+  ansible.builtin.yum_repository:
+    name: "mongodb-org-{{ mongodb_cis_version }}"
+    description: MongoDB Repository
+    baseurl: "{{ mongodb_cis_repo_baseurl }}"
+    gpgkey: "{{ mongodb_cis_repo_gpgkey }}"
+    gpgcheck: true
+    enabled: true
+
+- name: "INSTALL | PATCH | Install MongoDB packages"
+  ansible.builtin.dnf:
+    name: "{{ mongodb_cis_package }}"
+    state: present
+
+- name: "INSTALL | PATCH | Start and enable mongod"
+  ansible.builtin.systemd_service:
+    name: "{{ mongodb_cis_service }}"
+    state: started
+    enabled: true

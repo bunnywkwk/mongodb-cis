@@ -1,3 +1,21 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# tasks file for mongodb_cis
+- name: Run preliminary checks and discovery
+  ansible.builtin.import_tasks:
+    file: prelim.yml
+  tags:
+    - always
+
+- name: Run section 1 - Installation and Patching
+  when: mongodb_cis_section1 | bool
+  ansible.builtin.import_tasks:
+    file: section_1.yml
+
+- name: Run section 5 - Audit Logging
+  when: mongodb_cis_section5 | bool
+  ansible.builtin.import_tasks:
+    file: section_5.yml
+
+- name: Run section 7 - File Permissions
+  when: mongodb_cis_section7 | bool
+  ansible.builtin.import_tasks:
+    file: section_7.yml
