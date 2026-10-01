@@ -1,3 +1,5 @@
-.ansible
-.ansible-
-.yamllint
+.ansible/
+cis-pdf/
+cis-spreadsheet/
+*.pdf
+*.xlsx
