@@ -1,0 +1,27 @@
+---
+- name: "6.2 | AUDIT | Ensure that operating system resource limits are set for MongoDB"
+  when:
+    - mongodb8_cis_rule_6_2
+    - mongodb8_cis_level_2
+  tags:
+    - level2
+    - manual
+    - audit
+    - rule_6.2
+    - limits
+  vars:
+    # CIS ulimit letters -> systemd: f=FSIZE, t=CPU, v=AS, n=NOFILE, m=RSS, u=NPROC
+    mongodb8_cis_6_2_limits:
+      LimitFSIZE: infinity
+      LimitCPU: infinity
+      LimitAS: infinity
+      LimitNOFILE: "64000"
+      LimitRSS: infinity
+      LimitNPROC: "64000"
+  ansible.builtin.debug:
+    msg: >-
+      6.2 {{ 'PASS' if discovered_mongod_service['status'][item.key] | default('') == item.value else 'REVIEW' }}:
+      {{ item.key }} = {{ discovered_mongod_service['status'][item.key] | default('unknown') }} (CIS: {{ item.value }}).
+  loop: "{{ mongodb8_cis_6_2_limits | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"

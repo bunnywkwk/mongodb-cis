@@ -1,8 +1,8 @@
-# Troubleshooting log: `mongodb_cis`
+# Troubleshooting log: `mongodb8_cis`
 
 Errors hit while building and testing this role, with the exact message, cause and fix.
 Workstation/tooling errors: [../../docs/troubleshooting.md](../../docs/troubleshooting.md).
-Newest last. Format: **Symptom** (exact output) → **Cause** → **Fix** → **Prevent**.
+Newest last. Logs before 2026-10-01 show the old role name `mongodb_cis` (renamed to `mongodb8_cis`, D23). Format: **Symptom** (exact output) → **Cause** → **Fix** → **Prevent**.
 
 ---
 
@@ -35,7 +35,7 @@ WARNING  Found incompatible custom yamllint configuration (.yamllint), please ei
 
 **Fix:** `.yamllint` gets `line-length: disable` and `braces`/`brackets` `max-spaces-inside: 1` (Lockdown settings).
 
-**Prevent:** run lint **inside** `mongodb_cis/`; yamllint reads `.yamllint` from the current directory.
+**Prevent:** run lint **inside** `mongodb8_cis/`; yamllint reads `.yamllint` from the current directory.
 
 ## T-M3: skeleton leftovers break lint (2026-09-29)
 
@@ -53,7 +53,7 @@ tests/test.yml:6:7
 
 **Prevent:** replace skeleton files completely when writing them.
 
-## T-M4: "Conditionals must have a boolean result" with `-e mongodb_cis_install=true` (2026-09-30)
+## T-M4: "Conditionals must have a boolean result" with `-e mongodb8_cis_install=true` (2026-09-30)
 
 **Symptom** (RHEL 10, main env, ansible-core 2.20.7)
 ```
@@ -72,15 +72,15 @@ fatal: [rhel10-mongo]: FAILED! => {"changed": false, "msg": "Task failed: Condit
 **Cause:** (not `--check`; the `-e` value)
 - `-e key=value` always passes a **string** (`"true"`).
 - ansible-core 2.19+ rejects non-boolean conditionals.
-- On 2.16 (RHEL 8 env) there is no error, but any non-empty string is true, so `-e mongodb_cis_install=false` would install.
+- On 2.16 (RHEL 8 env) there is no error, but any non-empty string is true, so `-e mongodb8_cis_install=false` would install.
 
-**Fix:** `when: mongodb_cis_install | bool`, and `mongodb_cis_install | bool` in the Report message. Full proof on both versions, including `=false` running on 2.16: D19.
+**Fix:** `when: mongodb8_cis_install | bool`, and `mongodb8_cis_install | bool` in the Report message. Full proof on both versions, including `=false` running on 2.16: D19.
 
-**Prevent:** every user-facing switch in a condition uses `| bool` (CLAUDE.md rule). Alternative on the CLI: pass JSON, `-e '{"mongodb_cis_install": true}'`.
+**Prevent:** every user-facing switch in a condition uses `| bool` (CLAUDE.md rule). Alternative on the CLI: pass JSON, `-e '{"mongodb8_cis_install": true}'`.
 
 ## T-M5: `No package mongodb-org available.` in `--check` (2026-09-30)
 
-**Symptom** (RHEL 10 base snapshot, `ansible-playbook site.yml --limit rhel10 -e mongodb_cis_install=true --check --diff`)
+**Symptom** (RHEL 10 base snapshot, `ansible-playbook site.yml --limit rhel10 -e mongodb8_cis_install=true --check --diff`)
 ```
 TASK [mongodb_cis : INSTALL | PATCH | Add the official MongoDB repository] ***
 --- before: /etc/yum.repos.d/mongodb-org-8.0.repo
@@ -107,7 +107,7 @@ fatal: [rhel10-mongo]: FAILED! => {"changed": false, "failures": ["No package mo
 - That's over-engineering for an opt-in install step.
 - **Use a real run to install** (tests 04–07 in [test-results.md](test-results.md) passed). `--check` stays fully supported for everything after the install, i.e. prelim and the CIS rules.
 
-**Prevent:** don't combine `--check` with `mongodb_cis_install=true` on a host without MongoDB.
+**Prevent:** don't combine `--check` with `mongodb8_cis_install=true` on a host without MongoDB.
 
 ## T-M6: `net.port` written as a string `'27018'` on ansible-core 2.16 (2026-09-30, found in pre-test)
 
@@ -118,11 +118,11 @@ fatal: [rhel10-mongo]: FAILED! => {"changed": false, "failures": ["No package mo
 ```
 
 **Cause:**
-- The draft put the setting in the rule's `vars:` as `port: "{{ mongodb_cis_port | int }}"`.
+- The draft put the setting in the rule's `vars:` as `port: "{{ mongodb8_cis_port | int }}"`.
 - On 2.16, a templated value stored in a variable is turned back into **text**, so `to_nice_yaml` quoted it.
 - mongod expects a number for `net.port`.
 - 2.20 keeps native types, so the bug only shows on the RHEL 8 env.
 
-**Fix:** build the setting **inside the same expression** that writes the file: `combine({'net': {'port': mongodb_cis_port | int}}, recursive=true)`. Re-test on both versions: `port: 27018` (number), run 2 `changed=0`.
+**Fix:** build the setting **inside the same expression** that writes the file: `combine({'net': {'port': mongodb8_cis_port | int}}, recursive=true)`. Re-test on both versions: `port: 27018` (number), run 2 `changed=0`.
 
 **Prevent:** only put **literal** values (`true`, `false`, fixed text) in a rule's `vars:` settings dict. Anything computed from a variable goes inline in the `combine(...)`. Test every PATCH on **both** ansible-core versions before handing it over.

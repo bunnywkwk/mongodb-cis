@@ -1,4 +1,4 @@
-# Design decisions — `mongodb_cis`
+# Design decisions — `mongodb8_cis`
 
 Every decision below has three parts: **Decision**, **Why**, and **Evidence**. Source IDs (S1–S9) are defined in
 [platform-notes.md](platform-notes.md#sources). Four more sources are used here:
@@ -10,17 +10,17 @@ Every decision below has three parts: **Decision**, **Why**, and **Evidence**. S
 | L4 | ansible-lockdown `RHEL9-CIS` (devel, cloned 2026-09-29): `grep -rn rhel9cis_level_ tasks/` finds nothing. The level vars appear only in `templates/lockdown_audit.yml.j2` and `templates/etc/ansible/compliance_facts.j2`. README, *Matching a security Level for CIS*: *"This is managed using tags"*. Tag count: 237 rules tagged level1 only, 57 level2 only, 8 both |
 | L3 | ansible-lockdown `RHEL9-CIS`, `defaults/main/main.yml` (`rhel9cis_disruption_high: false`, `rhel9cis_section1`, `rhel9cis_level_1`) and `defaults/main/audit.yml` (`setup_audit`, `run_audit`, `audit_only`) |
 
-Scope: **MongoDB Community 8.0, standalone `mongod`, RHEL 8, 9 and 10**, CIS MongoDB 8 Benchmark v2.0.0 (S5, S6).
-Chosen with the user on 2026-09-29 (RHEL 8 added the same day).
+Scope: **MongoDB Enterprise 8.0, standalone `mongod`, RHEL 8, 9 and 10**, CIS MongoDB 8 Benchmark v2.0.0 (S5, S6).
+Chosen with the user on 2026-09-29 (RHEL 8 added the same day). Edition changed from Community to Enterprise on 2026-10-01 (D12).
 
 > Recovery note: this file and `platform-notes.md` were rebuilt on 2026-09-29 after an accidental
-> `ansible-galaxy role init --force` deleted `mongodb_cis/`. Content is the last version from the working session.
+> `ansible-galaxy role init --force` deleted `mongodb8_cis/`. Content is the last version from the working session.
 
 ---
 
 ## D1. One role for RHEL 8, 9 and 10, no OS branches
 
-- **Decision:** a single `mongodb_cis` role. The only OS-dependent value is the repo `baseurl`, built from `ansible_facts['distribution_major_version']`.
+- **Decision:** a single `mongodb8_cis` role. The only OS-dependent value is the repo `baseurl`, built from `ansible_facts['distribution_major_version']`.
 - **Why:** an OS branch is only justified by a real difference, and none was found.
 - **Evidence:** S1 gives the same install steps for 8/9/10; only the `baseurl` number changes. S3: the el8, el9 and el10 RPMs ship a byte-identical `mongod.conf` and systemd unit, with the same user and paths. S2: the same 8.0.32 build exists for all three.
 - **Not a task branch:** RHEL 8's OpenSSL 1.1.1 (vs 3.x) changes no config key; TLS rules are tested on each OS. RHEL 8's Python is handled by D15.
@@ -54,15 +54,16 @@ Chosen with the user on 2026-09-29 (RHEL 8 added the same day).
   - Manual-rule report only: `--tags audit`.
 - **Evidence:** L1. The tags on rule 5.4.2.2 (`level1-server`, `patch`, `rule_5.4.2.2`, ...) sit on the block; the inner AUDIT task inherits them.
 
-## D6. Disruptive rules behind `mongodb_cis_disruption_high: false`
+## D6. Disruptive rules are off by default (their own toggles)
 
-- **Decision:** rules that can lock out users or break clients also require `mongodb_cis_disruption_high: true`:
-  - 2.1: enable authorization.
-  - 2.2: disable localhost bypass.
-  - 4.3: require TLS.
-  - 6.1: change the port.
-- **Why:** it is one clear switch, and it is Lockdown's own convention, not something we invented. A fresh install fails all four rules (see platform-notes "Fresh-install state"). Enabling them without an admin user, certificates or updated client connection strings breaks access.
-- **Evidence:** L3, `rhel9cis_disruption_high: false` with the comment *"Run tests that are considered higher risk and could have a system impact if not properly tested"*.
+- **Decision:** rules that can lock out users or break clients have their rule toggle set to `false` in `defaults/main.yml`, each with a `# WARNING:` comment. The site turns each one on when it is ready:
+  - 2.1 `mongodb8_cis_rule_2_1`: create the admin user, enable authorization.
+  - 2.2 `mongodb8_cis_rule_2_2`: disable the localhost exception.
+  - 4.3 `mongodb8_cis_rule_4_3`: require TLS.
+  - 4.4 `mongodb8_cis_rule_4_4`: FIPS mode (it disables SCRAM-SHA-1 and non-FIPS ciphers, S4 FIPS page).
+  - 6.1 `mongodb8_cis_rule_6_1`: change the port.
+- **Why:** CLAUDE.md principle 3: anything that can lock users out needs *"a toggle, a safe default, and a `# WARNING:` comment"*, and the naming rule says rule toggles default to *"`true` (or `false` for manual/risky)"*. A fresh install fails all of these rules (platform-notes "Fresh-install state"); enabling them without an admin user, certificates or updated client connection strings breaks access.
+- **Revised 2026-10-01 (user decision):** these rules used to stay `true` and were held back by one extra switch, `mongodb8_cis_disruption_high: false`, copied from Lockdown (L3). That switch is not part of CIS or any standard, Lockdown itself uses it inconsistently (RHEL 8/9/10 roles default `false`, UBUNTU22-CIS defaults `true`, Windows-2022-CIS has none), and it hid which rules it covered. It was removed; each risky rule is now visible and switched on by name.
 
 ## D7. How `/etc/mongod.conf` is changed
 
@@ -80,45 +81,46 @@ Chosen with the user on 2026-09-29 (RHEL 8 added the same day).
 
 ## D8. Paths come from the live config, not from the docs
 
-- **Decision:** `dbPath`, the log path and the service user are read from `mongod.conf` and the systemd unit. The user comes from prelim's read-only `systemd_service` call (`status.User`) → `mongodb_cis_service_user`. The package defaults (`/var/lib/mongo`, `/var/log/mongodb/mongod.log`, `mongod`) are used only as fallbacks in `vars/main.yml`.
+- **Decision:** `dbPath`, the log path and the service user are read from `mongod.conf` and the systemd unit. The user comes from prelim's read-only `systemd_service` call (`status.User`) → `mongodb8_cis_service_user`. The package defaults (`/var/lib/mongo`, `/var/log/mongodb/mongod.log`, `mongod`) are used only as fallbacks in `vars/main.yml`.
 - **Why:** the MongoDB install page and the RHEL package disagree. The docs say user `mongodb` and `/var/lib/mongodb`; the RPM uses `mongod` and `/var/lib/mongo`. Sites may also move `dbPath`.
 - **Evidence:** S1 vs S3 (see platform-notes, "The docs and the package disagree").
 
-## D9. Community edition: rules that cannot be applied
+## D9. Enterprise-only rules: applied, not reported as gaps
 
-| Rule | Why not applicable | Evidence | Role behaviour |
+The benchmark marks these as Enterprise features. This role targets Enterprise, so each is a normal rule:
+
+| Rule | Enterprise feature | Evidence | Role behaviour |
 |------|--------------------|----------|----------------|
-| 4.4 FIPS mode | *"FIPS mode is only available with MongoDB Enterprise edition."* | S4 FIPS page | AUDIT: report "not available on Community" |
-| 4.5 Encryption at rest | *"Available in MongoDB Enterprise only."* | S4 encryption page; S5 4.5 Additional Information | AUDIT: report |
-| 5.1 System activity audited | *"MongoDB Enterprise includes an auditing facility"*; Community is not listed | S4 auditing page | AUDIT: report as a documented gap |
-| 5.2 Audit filters | S5: *"This check is only for Enterprise editions."* | S5 5.2 | AUDIT: report |
+| 4.4 FIPS mode (L2, Automated) | `net.tls.FIPSMode` | S4 FIPS page; S5 4.4 | Built with Section 4 |
+| 4.5 Encryption at rest (L2, Manual) | encrypted storage engine (KMIP or keyfile) | S4 encryption page; S5 4.5 *"Available in MongoDB Enterprise only"* | Manual → report only (D4), built with Section 4 |
+| 5.1 System activity audited (L1, Automated) | `auditLog` | S4 config options *"Available only in MongoDB Enterprise"*; S5 5.1 | PATCH when `auditLog.destination` is missing (D21) |
+| 5.2 Audit filters (L2, Manual) | `auditLog.filter` | S5 5.2 *"This check is only for Enterprise editions"* | AUDIT: reports the filter (D4) |
 
-These are reported, not hidden, so an auditor sees the gap and the reason.
+- **Revised 2026-10-01:** while the role targeted Community, these four were reported as "not applicable". The switch to Enterprise (D12) made them real rules.
 
-## D10. Rule 5.3 on Community — deviation to confirm with the mentor
+## D10. Rule 5.3 follows the benchmark
 
-- **Decision:** apply 5.3 (`systemLog.quiet: false`) on Community.
-- **Why:** S5 5.3 says *"This check is only for Enterprise editions"*, but `systemLog.quiet` exists in Community with default `false` (S4 configuration options). The setting is harmless, and a fresh install is already compliant (S3), so the PATCH only runs if someone set `quiet: true`.
-- **Status:** a deviation from the benchmark text. The user can disable it with `mongodb_cis_rule_5_3: false`.
+- **Decision:** apply 5.3 (`systemLog.quiet: false`) as written.
+- **Why:** S5 5.3 says *"This check is only for Enterprise editions"*, and the role targets Enterprise. A fresh install is already compliant (`quiet` not set, default `false`, S3/S4), so the PATCH only runs if someone set `quiet: true`.
+- **Revised 2026-10-01:** this was a deviation (5.3 applied on Community) waiting for the mentor's confirmation. With Enterprise it is no longer a deviation.
 
-## D11. Rule 6.1 (non-default port) conflicts with the MongoDB SELinux policy
+## D11. Rule 6.1 (non-default port) and SELinux
 
 - **Decision:**
   - The rule is disruptive (D6).
-  - The port is a site value, `mongodb_cis_port`, with no default invented by the role.
-  - The rule fails with a clear message if enabled without a port.
-- **Why:** CIS gives no port number (*"$Orginasation Defined port"*, S5 6.1). The MongoDB SELinux policy only supports default ports (S1: *"you cannot use the MongoDB supplied SELinux policy"* with custom ports). A port change therefore also needs SELinux port labelling and a firewall change.
-- **SELinux detail (platform-notes "SELinux", D17):**
-  - Without MongoDB's module, `mongod` is `unconfined_service_t`, so SELinux does not block the new port.
-  - With the module, the new port must first be labelled `mongod_port_t`, or `mongod` will not start.
-  - Firewalld needs the new port opened either way.
-- **Status:** PATCH written 2026-09-30 (assert 1024–65535 and ≠ 27017; `net.port` merged; handler waits on the new port). With the default SELinux state (`mongod` unconfined) no port label is needed; the optional SELinux extra (D17) will label it. Firewall stays site policy (bindIp is `127.0.0.1` by default, so no firewall change is needed). **VM test under enforcing still pending.**
+  - The port is a site value, `mongodb8_cis_port`, with no default invented by the role; the rule stops with a clear message if it is not 1024–65535 or is 27017.
+  - When SELinux is enabled and the port is not one the base policy already labels (27017-27019, 28017-28019), 6.1 installs `policycoreutils-python-utils` and labels the port `mongod_port_t` (`community.general.seport`) before the restart.
+- **Why:** CIS gives no port number (*"$Orginasation Defined port"*, S5 6.1). On RHEL 8 and 9 the base policy already confines `mongod` as `mongod_t` (platform-notes "SELinux"), so it can only bind `mongod_port_t` ports; without the label `mongod` would not start under enforcing. On RHEL 10 `mongod` is unconfined unless the SELinux extra is on, and the label is harmless.
+- **Firewall:** stays site policy (`bindIp` is `127.0.0.1` by default, so no firewall change is needed).
+- **Revised 2026-10-01:** the earlier text said no port label was needed with the default SELinux state. That held for RHEL 10 only.
+- **Status:** the merge and the restart wait on the new port are tested (Section 6 tests); the `seport` step needs a host with SELinux enabled: **to verify on the VMs.**
 
 ## D12. Install is opt-in
 
-- **Decision:** `mongodb_cis_install: false`. When `true`, the role creates the S1 repo with `yum_repository` and installs `mongodb-org`.
+- **Decision:** `mongodb8_cis_install: false`. When `true`, the role creates the S1 Enterprise repo (`mongodb-enterprise-<version>`) with `yum_repository` and installs `mongodb-enterprise`.
 - **Why:** the role's job is hardening. Installing must be a deliberate choice, and it is needed now only because the test VMs are empty.
 - **Evidence:** S1 repo definition and install command. CLAUDE.md "Application roles: Install is opt-in".
+- **Revised 2026-10-01:** switched from the Community repo (`repo.mongodb.org`, `mongodb-org`) to Enterprise (`repo.mongodb.com`, `mongodb-enterprise`), the edition in use. Community and Enterprise packages conflict, so a Community host must be cleaned first (platform-notes "Installation"). The key URL follows MongoDB's naming change at 9.0 (`server-8.0.asc` → `server-9.asc`), so `mongodb8_cis_version` alone still selects the repo.
 
 ## D13. Talking to the database (rules 2.1, 3.x): `community.mongodb.mongodb_shell`
 
@@ -149,8 +151,8 @@ These are reported, not hidden, so an auditor sees the gap and the reason.
 
 - **Most automated audits are config-file reads.** S6 "Audit Procedure": 2.1, 2.2, 4.2, 4.3, 5.1, 5.3, 5.4 and 6.1 are all `cat /etc/mongod.conf | grep <key>`. Our shared AUDIT (D7: `slurp` + `from_yaml` → `discovered_mongod_conf`) checks the same keys, structurally. That is more reliable than `grep`, which can't tell a commented-out key or a key in the wrong section.
 - **Legacy `ssl` vs `tls` names.** S6 4.2 greps under `ssl`, while 4.1/4.3 use `net.tls`. MongoDB 4.2 renamed `net.ssl.*` to `net.tls.*` and kept `ssl` as deprecated aliases. The role writes only `net.tls.*`. The AUDIT for 4.1/4.2/4.3 flags a legacy `net.ssl` block as drift, so it can't hide an old setting.
-- **Runtime, not file, for 6.2.** S6 6.2 audits `/proc/<mongod PID>/limits`, not the unit file. The AUDIT reads `MainPID` (`systemctl show mongod -p MainPID`) and then `/proc/<pid>/limits`, so a systemd drop-in that lowers limits is caught.
-- **4.1 and 4.2 check the same key.** Both require `TLS1_0,TLS1_1` in `net.tls.disabledProtocols` (S5/S6), at L2 and L1 respectively. One PATCH task satisfies both; each rule keeps its own ID, toggle and block, so skipping one does not skip the other.
+- **6.2 reads the unit's effective limits.** S6 6.2 audits `/proc/<mongod PID>/limits`. The role uses prelim's read-only `systemd_service` result (`Limit*` properties), which already merges drop-ins, so no extra task. CIS letters map to systemd as f=`LimitFSIZE`, t=`LimitCPU`, v=`LimitAS`, n=`LimitNOFILE`, **m=`LimitRSS`** (resident memory, *not* `LimitMEMLOCK`, which is `ulimit -l`), u=`LimitNPROC`. *Revised 2026-10-01: the earlier plan read `/proc/<pid>/limits`.*
+- **4.1 and 4.2 check the same key.** Both require `TLS1_0,TLS1_1` in `net.tls.disabledProtocols` (S5/S6), at L2 and L1 respectively. Each rule keeps its own ID, toggle and block, so skipping one does not skip the other; whichever runs first fixes the key and the other then finds it compliant. Both only write when TLS is enabled (D25).
 - **Defaults per S6 "Default Value":** authorization disabled (2.1), `enableLocalhostAuthBypass` `true` (2.2), `javascriptEnabled` enabled (6.3). This agrees with the fresh-install state in platform-notes.
 
 ## D15. RHEL 8: run it from ansible-core 2.16.1+; the role stays 2.16-compatible
@@ -175,31 +177,26 @@ S6 has three result columns per rule. Our VM test runs use the same three states
 
 | State | Expected | How we produce it |
 |-------|----------|-------------------|
-| Default installation | mix of Pass/Fail (see platform-notes "Fresh-install state") | fresh VM + `mongodb_cis_install: true`, run with `--check` |
+| Default installation | mix of Pass/Fail (see platform-notes "Fresh-install state") | fresh VM + `mongodb8_cis_install: true`, run with `--check` |
 | Non-hardened | all Fail | edit `mongod.conf` to violate every automated rule, run `--check` → every PATCH reports "would change" |
 | Remediated/Hardened | all Pass | normal run, then a second run → `changed=0` |
 
-Column H ("exceptions") is where Community gaps (D9) and deviations (D10) are recorded.
+Column H ("exceptions") is where deviations from the benchmark text are recorded. None are open since the switch to Enterprise (D9, D10).
 
 ## D17. SELinux policy for `mongod`: optional extra, off by default
 
-- **Decision:**
-  - `mongodb_cis_selinux_policy: false` by default. When set to `true`:
-    1. Install MongoDB's official policy module (S9). It is compiled once on the control node, and only the `.pp` file is copied to the target, so there are no compilers on servers.
-    2. Label the non-default `dbPath`, log path and port that the role knows about (`semanage fcontext` + `restorecon`, `semanage port` for rule 6.1).
-    3. Verify that `mongod` then runs as `mongod_t`.
-  - It is **not a CIS rule**:
-    - It has no CIS ID or level tags. It is named and tagged `selinux_policy`.
-    - It is documented in the README as "extra hardening beyond CIS MongoDB".
-    - It is built **after** all CIS rules are done.
-- **Why optional:**
-  - The scope is the CIS MongoDB 8 benchmark (S5), which has no SELinux recommendation. CLAUDE.md says never present an extra control as CIS.
-  - Confinement is still real defense in depth: without it, `mongod` runs as `unconfined_service_t` (platform-notes "SELinux"). So users who want it can switch it on.
-- **Why off by default:**
-  - MongoDB supports its policy only with default paths and ports (S1). Every non-default value must be labelled, or `mongod` fails to start.
-  - The policy is maintained by MongoDB, not Red Hat, so each MongoDB or RHEL update needs a retest.
-- **Limits (documented, not hidden):** the role labels only the paths and ports it manages or reads from `mongod.conf`. Anything else a site adds (backup dirs, extra ports) is the site's job.
-- **Revised:** twice on 2026-09-29. First it was proposed as an opt-in with a reference to the RHEL OS benchmark; then removed as out of scope; now re-added as an optional non-CIS extra, without any OS-benchmark reference (user decision).
+- **Decision:** `mongodb8_cis_selinux_policy: false`. When `true` and SELinux is enabled, `tasks/selinux.yml` (tag `selinux_policy`, no CIS ID):
+  1. Installs `policycoreutils-python-utils`, plus `selinux-policy-devel` (which brings `make`, `checkpolicy`) on RHEL 9/10.
+  2. **RHEL 9/10:** copies MongoDB's module sources (S9, pinned in `files/selinux/`) to `/usr/share/mongodb8_cis/selinux/`, builds `mongodb.pp` with `/usr/share/selinux/devel/Makefile` and loads it with `semodule --priority 200`, as the upstream `Makefile` does. It rebuilds only when the sources changed or no priority-200 `mongodb` module is loaded.
+  3. **RHEL 8:** reports that the base policy's `mongodb` module already confines `mongod`. MongoDB's module is not installed: it does not build there.
+  4. **All:** labels a non-default `dbPath` and log directory (`community.general.sefcontext`) and a non-default port (`seport`), runs `restorecon -R -v` on the binary, unit, `dbPath` and log directory (changed only when it relabels), and reports the domain `mongod` was running in.
+  5. Any change notifies the restart, so `mongod` comes back in the new domain.
+- **Why build on the host:** S1 documents it that way, and a module must be built against the base policy of the release it runs on (RHEL 8, 9 and 10 ship different ones, platform-notes "SELinux"). The earlier plan (build once on the control node, copy the `.pp`) would need a build per RHEL release outside the role. Cost: `selinux-policy-devel`, `make`, `checkpolicy` on the database server, all from the RHEL repos. This is why it is opt-in.
+- **Why the sources are copied, not cloned:** no `git` and no internet access needed on the server, and the policy version is fixed by the role.
+- **Why optional:** the CIS MongoDB 8 benchmark has no SELinux recommendation (S5); CLAUDE.md says never present an extra control as CIS. It is documented in the README as an extra.
+- **Limits:** the role labels only the paths and port it reads from `mongod.conf`. Other paths a site adds (backup dirs, a custom audit log path, certificates outside standard locations) are the site's job. MongoDB maintains the module, so each MongoDB or RHEL update needs a retest.
+- **Tested 2026-10-01** in containers (test-results "SELinux extra"); loading into a running kernel, labels and `mongod_t` at runtime: **to verify on the VMs.**
+- **Revised:** 2026-09-29 (twice: proposed, removed as out of scope, re-added as an optional extra, user decision); 2026-10-01: built on the host per S1, RHEL 8 handled separately after the container tests.
 
 ## D18. Level 1 / Level 2 selection
 
@@ -216,8 +213,8 @@ S5 "Profile Definitions": Level 2 *"extends the 'Level 1 - MongoDB' profile"*. S
 
 **Decision for this role:**
 - **Variables really gate the rules:**
-  - `mongodb_cis_level_1: true` and `mongodb_cis_level_2: false`.
-  - Every Level 1 rule has `when: mongodb_cis_level_1`; every Level 2 rule has `when: mongodb_cis_level_2`. The per-rule toggle (`mongodb_cis_rule_<id>`) still applies on top.
+  - `mongodb8_cis_level_1: true` and `mongodb8_cis_level_2: false`.
+  - Every Level 1 rule has `when: mongodb8_cis_level_1`; every Level 2 rule has `when: mongodb8_cis_level_2`. The per-rule toggle (`mongodb8_cis_rule_<id>`) still applies on top.
 - **Tags kept as well,** Lockdown-style: `level1` or `level2`. The MongoDB benchmark has no server/workstation split, so there is no `-server` suffix. A full Level 2 run by tags is `--tags level1,level2`.
 - **Profiles expressed with variables:**
   - Level 1 profile (default): `level_1: true`, `level_2: false`.
@@ -227,12 +224,12 @@ S5 "Profile Definitions": Level 2 *"extends the 'Level 1 - MongoDB' profile"*. S
 **Why it differs from Lockdown:**
 - We don't use Goss (see "Not adopted"). A level variable that changes nothing would mislead users; the exact misunderstanding L4 shows is easy to have.
 - Default **Level 1 only:** S5 defines Level 1 as *"practical and prudent"* and not limiting utility, and Level 2 as for environments *"where security is paramount"*. Lockdown enables both by default; we choose the CIS baseline and make Level 2 an explicit choice.
-- **Confirmed** by the user on 2026-09-29, after comparing it with pure Lockdown (tags only, no level vars): keep vars that gate rules, plus tags. Everything else matches Lockdown: section switches, rule toggles, level tags, `disruption_high`, AUDIT → PATCH.
+- **Confirmed** by the user on 2026-09-29, after comparing it with pure Lockdown (tags only, no level vars): keep vars that gate rules, plus tags. Everything else matches Lockdown: section switches, rule toggles, level tags, AUDIT → PATCH (`disruption_high` was dropped on 2026-10-01, D6).
 
-## D19. Every user switch in a condition gets `| bool`
+## D19. Switches must be real YAML booleans (`| bool` removed 2026-10-01)
 
 **In plain words:**
-- When you type `-e mongodb_cis_install=false` on the command line, Ansible receives the **text** `"false"`, not the value *false*. AWX/Tower surveys do the same.
+- When you type `-e mongodb8_cis_install=false` on the command line, Ansible receives the **text** `"false"`, not the value *false*. AWX/Tower surveys do the same.
 - Text that isn't empty counts as "yes", so without `| bool`, "false" can mean **true**.
 - `| bool` turns the text back into a real yes/no: `"true"`/`"yes"`/`true` → true, `"false"`/`"no"`/`false` → false.
 - It is **not** about `--check`; it's about where the value comes from. Values from `defaults/` or `group_vars` YAML are already real booleans, and `| bool` leaves them unchanged. So it's never harmful, and it protects every way a user can set a switch.
@@ -244,9 +241,9 @@ Origin: .../mongodb_cis/tasks/prelim.yml:39:9
 39   when: mongodb_cis_install
 ```
 
-**Evidence 2: the silent danger on 2.16.** A debug-only playbook on localhost, `when: mongodb_cis_install` vs `when: mongodb_cis_install | bool`:
+**Evidence 2: the silent danger on 2.16.** A debug-only playbook on localhost, `when: mongodb8_cis_install` vs `when: mongodb8_cis_install | bool`:
 
-| ansible-core | `-e mongodb_cis_install=` | Without `\| bool` | With `\| bool` |
+| ansible-core | `-e mongodb8_cis_install=` | Without `\| bool` | With `\| bool` |
 |--------------|---------------------------|--------------------|-----------------|
 | 2.20.7 (RHEL 9/10 env) | `true` | ❌ run stops with the error above | ✅ runs |
 | 2.20.7 | `false` | ❌ run stops with the error above | ✅ skipped |
@@ -273,29 +270,120 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 - ansible-core 2.19 porting guide: non-boolean conditionals now fail (*"Conditionals must have a boolean result"*). Before, truthy strings *"masked serious logic errors."*
 - **Lockdown RHEL9-CIS uses `| bool` nowhere** (0 matches in `tasks/`). It expects users to give real YAML booleans. **This is a deliberate deviation from Lockdown.**
 
-**Decision:** every user-facing switch used in a `when:` (install, levels, sections, rule toggles, `disruption_high`) is written `<var> | bool`. Internal facts the role sets itself (`discovered_*`) don't need it.
+**Original decision (2026-09-30):** every user-facing switch used in a `when:` was written `<var> | bool`, because the two ansible-core generations fail in opposite ways on text values (hard stop vs silent wrong run).
 
-**Why deviate from Lockdown here:**
-- This role is run by **two** ansible-core generations (2.16 for RHEL 8, 2.20 for RHEL 9/10), and they fail in opposite ways (silent wrong run vs hard stop).
-- `| bool` costs nothing for correct input and makes a hardening toggle mean exactly what the user wrote, whatever the input source.
+**Revised 2026-10-01 (user decision): `| bool` removed from the switches**, as in Lockdown (0 uses in `RHEL9-CIS/tasks/`):
+- The switches are set in `group_vars` YAML files, not with `-e`, so they arrive as real booleans; `| bool` changes nothing for them.
+- **Kept only where the value comes from `mongod.conf`** (2.2 `setParameter.enableLocalhostAuthBypass`, 4.5 `security.enableEncryption`): the file is written by people and may hold `"false"` or `0`.
+- Values the role computes itself (`mongodb8_cis_tls_enabled`, `_shell_auth`, `_shell_tls`, `_selinux_build`) are real booleans on both versions, also inside `{{ … if … else … }}`.
+- Re-tested on 2.20.7 and 2.16.19 (`when:` without `| bool`):
+
+| Value | 2.20.7 | 2.16.19 |
+|-------|--------|---------|
+| YAML `false` (`group_vars`, `defaults`) | skipped | skipped |
+| computed `"{{ 'a' == 'b' }}"` | skipped | skipped |
+| `-e '{"x": false}'` (JSON) | skipped | skipped |
+| `"false"` (quoted YAML) or `-e x=false` | **error**, play stops | **runs** (deprecation warning only) |
+
+**Rule for users (README, test docs):** write switches unquoted (`true` / `false`), never `"false"`. To set one on the command line, use JSON: `-e '{"mongodb8_cis_rule_6_1": true}'`, never `-e mongodb8_cis_rule_6_1=false`.
 
 ## D20. Manual rules: report by default, optional "site decision" variable where CIS gives one clear fix
 
 - **Decision:**
   - Manual rules stay report-only by default (D4).
   - A site may declare its decision with a variable **only where the benchmark gives one clear remediation**:
-    - 6.3: `mongodb_cis_javascript_needed: true` by default. `false` → PATCH `security.javascriptEnabled: false`.
+    - 6.3: `mongodb8_cis_javascript_needed: true` by default. `false` → PATCH `security.javascriptEnabled: false`.
     - 7.2: opt-in permission fix.
   - All other Manual rules stay report-only:
     - 3.x: which users and roles are right is site-specific.
     - 1.1: never auto-upgrade.
     - 6.2: the shipped unit is already compliant.
     - 7.1: no keyFile on standalone.
-    - 4.5, 5.2: Enterprise-only.
+    - 4.5: key management (KMIP or keyfile) is a site design, not one setting.
+    - 5.2: CIS says *"Set the audit filters based on the organization's requirements"*.
 - **Why:**
   - CIS marks a rule Manual because *"the expected state can vary depending on the environment"* (S5, Assessment Status).
   - A variable set by the site is the site's decision, not the role guessing (CLAUDE.md principle 5 still holds).
-- **Status:** agreed 2026-09-30. 7.2 built (`mongodb_cis_fix_db_path_permissions`); 6.3 comes with Section 6.
+- **Status:** agreed 2026-09-30. 7.2 built (`mongodb8_cis_fix_db_path_permissions`); 6.3 comes with Section 6.
+
+## D21. Rule 5.1: add `auditLog` only when it is missing, `syslog` by default
+
+- **Decision:**
+  - AUDIT: rule 5.1 is compliant when `auditLog.destination` is set to anything. This is the S5 audit (*"confirm the auditLog.destination value is set"*), done on the parsed config (D14).
+  - PATCH (only when missing): merge `auditLog` from site values, then restart (D7):
+    - `mongodb8_cis_audit_destination: syslog` (allowed: `syslog`, `console`, `file`).
+    - With `file`: `mongodb8_cis_audit_format` (`JSON`/`BSON`, default `JSON`) and `mongodb8_cis_audit_path` (empty = `auditLog.<format>` next to `systemLog.path`, D8).
+    - An assert stops the rule with a clear message on any other value.
+  - An existing `auditLog` is **never changed**, even if it differs from the variables.
+- **Why `syslog` as default:**
+  - CIS lists syslog, console, JSON file and BSON file without picking one (S5 5.1), so the default is ours.
+  - With syslog, the OS log stack (journald/rsyslog) rotates the events and can forward them to central log management (CIS Control 8.2, cited by 5.1). A file is never rotated by mongod on its own and can fill the disk.
+  - S4 limit: syslog messages can be truncated without any error. Sites that need complete records choose `file`.
+- **Why never change an existing `auditLog`:** any destination passes CIS, and a site that set one chose it. Overwriting it would break their log pipeline for no compliance gain, and merging over it could leave `format`/`path` behind with a different destination.
+- **Not disruptive:** its toggle stays `true` (D6). Auditing locks nobody out, but it adds load and log volume and restarts `mongod` once (warning in `defaults/main.yml`).
+- **Tested 2026-10-01** on the scratch copy of the shipped `mongod.conf`, ansible-core 2.20.7 and 2.16.19:
+  - syslog, file/JSON and file/BSON with a custom path: run 1 `changed=1` + restart, run 2 `changed=0`.
+  - An existing `auditLog` is left untouched; an invalid destination stops with the assert message.
+  - The written files started the real `mongod` 8.0.32 Enterprise binary: syslog events appeared in the journal, and file mode wrote JSON audit records.
+
+## D22. Supported MongoDB version: 8.0 (CIS MongoDB 8 Benchmark)
+
+- **Decision:**
+  - `vars/main.yml` `mongodb8_cis_supported_versions: ["8.0"]`.
+  - prelim asserts twice: (A) `mongodb8_cis_version` is in the list, before any install, and (B) the **installed** series (`<major>.<minor>` of `discovered_mongodb_version`) is in the list, after detection.
+  - Install stays version-driven: repo name, URL and key come from `mongodb8_cis_version` (D12).
+- **Why:**
+  - CLAUDE.md principle 1: CIS is the source of truth. The role implements S5, which covers MongoDB 8.x; hardening another series with it would be a guess.
+  - Check (B) uses the installed version, not the variable: detect, don't assume (CLAUDE.md app roles).
+- **Adding a version later:** when a matching CIS benchmark exists, compare it with S5. Same rules → add the series to the list. Different → `vars/cis_<version>.yml` per CLAUDE.md.
+
+## D23. Role name `mongodb8_cis`: one role per CIS benchmark
+
+- **Decision:** the role is `mongodb8_cis` (`bunnywkwk.mongodb8_cis`), and every variable uses the `mongodb8_cis_` prefix. Renamed from `mongodb_cis` on 2026-10-01 (user decision).
+- **Why:**
+  - Lockdown names a role after the benchmark it implements (`RHEL8-CIS`, `RHEL9-CIS`), and CLAUDE.md prefixes variables with that short name (`rhel9cis_`). This role implements the CIS MongoDB 8 Benchmark (D22), so the name says which one.
+  - A later benchmark (another MongoDB major, or the Windows platform) gets its own role and prefix, so two roles in one playbook never share variables.
+  - Prefix style `<role>_` (with underscores) matches the sibling role `chrome_cis` (`chrome_cis_*`).
+
+## D24. How the role reaches the database (rules 2.x, 3.x)
+
+- **Decision:**
+  - One `module_defaults` for `community.mongodb.mongodb_shell` on the block that imports Sections 2 and 3 (`tasks/main.yml`), so every DB task stays short.
+  - The connection is built from `discovered_mongod_running_conf`, a prelim snapshot of `mongod.conf` taken **before** any rule edits it. Edits only apply after the restart handler, so the snapshot is what `mongod` is really running with.
+  - Host/port: first `bindIp` entry (`0.0.0.0` → `127.0.0.1`) and `net.port`.
+  - Login: `mongodb8_cis_admin_user`/`_password` only when the running config has `authorization: enabled`; otherwise no login (full access, as on a fresh install).
+  - TLS: only when the running mode is `requireTLS`. CA = running `net.tls.CAFile`. Client certificate = `mongodb8_cis_shell_tls_certificate_key_file`, or the server `certificateKeyFile` (it needs EKU `clientAuth`, or no EKU). `--tlsAllowInvalidHostnames` is passed because the role talks to its own `mongod` on the same host, while certificates are normally issued for the FQDN.
+  - prelim fails fast when Sections 2/3 are on, authorization is on and the login values are empty.
+- **Limits of `mongodb_shell` (collection 1.8.0 source, `plugins/modules/mongodb_shell.py`):**
+  - `--password` is added to the command line **unquoted** and the line is split with `shlex`, so a password with spaces, quotes or backslashes breaks the call. prelim rejects those characters (tested on 2.16 and 2.20).
+  - The password is a command-line argument of `mongosh` while it runs, so other local users can see it in the process list for that moment. Mitigation, if needed: mount `/proc` with `hidepid=2`. Accepted to keep D13's "no extra software on the DB servers".
+  - The TLS client certificate is passed with `ssl_keyfile` (`--tlsCertificateKeyFile`); `ssl_certfile` is accepted by the module but never used.
+- **Tested 2026-10-01** end to end (see test-results "Pre-VM end-to-end").
+
+## D25. Section 4 order: TLS first
+
+- **Decision:** `tasks/section_4/main.yml` imports **4.3 before 4.1 and 4.2** (a documented exception to CLAUDE.md "benchmark order"). 4.1, 4.2 and 4.4 only write when `net.tls.mode` is enabled; otherwise they report FAIL with the reason.
+- **Why:** the real `mongod` 8.0.32 Enterprise binary refuses to start with TLS options but no TLS mode: *"need to enable TLS via the sslMode/tlsMode flag when using TLS configuration parameters"* (tested 2026-10-01). Writing `disabledProtocols` on a default install (4.2 is Level 1) would leave `mongod` unable to start at the next restart. With 4.3 first, one run enables TLS and then restricts protocols.
+- **4.3 site values:** `mongodb8_cis_tls_certificate_key_file` and `mongodb8_cis_tls_ca_file`, falling back to the values already in `mongod.conf`. The PEM files must exist on the host (asserted). The rule only runs when the mode is not `requireTLS`, so existing TLS settings are never rewritten.
+- **4.4 FIPS:** S4 requires TLS first; the role checks that. On the test workstation (OpenSSL 3, OS FIPS mode off) `mongod` still logged *"FIPS 140 mode activated"*, so OS FIPS mode is not asserted. S4's OpenSSL 3 list names RHEL 9 but not RHEL 10: **to verify on the RHEL 10 VM.**
+- **4.5** is Manual: it reports `security.enableEncryption` and the key management in use (KMIP or keyfile).
+
+## D26. Rules 2.1 and 2.2: create the admin user before locking the door
+
+- **Decision (2.1):** when `security.authorization` is not `enabled` (and `mongodb8_cis_rule_2_1` is on, D6):
+  1. Assert `mongodb8_cis_admin_user`/`_password` are set.
+  2. AUDIT: `getUser()` on `admin`.
+  3. PATCH: `createUser` with role `root` on `admin`, as in the S5 remediation, only if the user is missing (`no_log: true`; the JSON-encoded values go inside the `eval`).
+  4. PATCH: `security.authorization: enabled` + restart.
+- **Decision (2.2):** when `enableLocalhostAuthBypass` is not false: count users in `admin.system.users`; assert at least one exists (skipped in `--check`, where 2.1 only simulates the user); then `setParameter.enableLocalhostAuthBypass: false` + restart. The value is a YAML boolean, which the real `mongod` accepts (tested).
+- **Why this order:** S5 2.1 says to create the administrator before enabling authorization, and S5 2.2 says the localhost exception is the only way in when no user exists. The assert stops the one combination that locks everyone out.
+- **2.3** targets sharded clusters; the role targets standalone, so it reports (`NOT APPLICABLE` without `sharding.clusterRole`) and is off by default.
+
+## D27. Task layout: one folder per section, one file per rule (Lockdown)
+
+- **Decision:** `tasks/main.yml` imports `section_<N>/main.yml` (with the section switch); each `section_<N>/main.yml` imports one file per rule, `cis_<N>.<M>.yml`, named `"SECTION | <ID> | <title>"`. The rule's toggle, level and tags stay in its own file.
+- **Why:** this is the Lockdown layout (L1, L2: `RHEL9-CIS/tasks/section_5/main.yml` imports `cis_5.1.x.yml` ...). Lockdown groups by sub-heading (`5.3.1.x`); the MongoDB benchmark has no sub-headings, so each rule is its own file. A rule is found and reviewed in one small file.
+- **Done 2026-10-01** (user request). Verified: the split files, joined in order, load to exactly the same YAML as the old `section_<N>.yml` files.
 
 ## Not adopted
 

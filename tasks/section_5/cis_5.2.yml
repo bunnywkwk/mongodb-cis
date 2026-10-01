@@ -1,0 +1,17 @@
+---
+- name: "5.2 | AUDIT | Ensure that audit filters are configured properly"
+  when:
+    - mongodb8_cis_rule_5_2
+    - mongodb8_cis_level_2
+  tags:
+    - level2
+    - manual
+    - audit
+    - rule_5.2
+    - logging
+  ansible.builtin.debug:
+    msg: >-
+      5.2 REVIEW: {{ ('auditLog.filter = ' ~ (discovered_mongod_conf['auditLog']['filter']
+      | default('not set (all auditable events are recorded)')) ~ '. Check it against the audit requirements of the organisation.')
+      if discovered_mongod_conf['auditLog']['destination'] | default('') | length > 0
+      else 'auditing is off (no auditLog.destination), so there is no filter to review. See rule 5.1.' }}

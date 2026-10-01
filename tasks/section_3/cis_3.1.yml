@@ -1,0 +1,28 @@
+---
+- name: "3.1 | AUDIT | Ensure least privilege for database accounts"
+  when:
+    - mongodb8_cis_rule_3_1
+    - mongodb8_cis_level_1
+  tags:
+    - level1
+    - manual
+    - audit
+    - rule_3.1
+    - authorization
+  block:
+    - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Find dbOwner, userAdmin, userAdminAnyDatabase in admin"
+      community.mongodb.mongodb_shell:
+        eval: >-
+          db.getSiblingDB('admin').system.users.find({'roles.role': {$in: ['dbOwner', 'userAdmin', 'userAdminAnyDatabase']},
+          'roles.db': 'admin'}, {_id: 0, user: 1, db: 1}).toArray()
+        transform: json
+      register: discovered_3_1_users
+      changed_when: false
+      check_mode: false
+
+    - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Report"
+      ansible.builtin.debug:
+        msg: >-
+          3.1 {{ 'PASS' if discovered_3_1_users['transformed_output'] | length == 0 else 'REVIEW' }}:
+          accounts with dbOwner, userAdmin or userAdminAnyDatabase in admin:
+          {{ discovered_3_1_users['transformed_output'] | map(attribute='user') | join(', ') or 'none' }}.

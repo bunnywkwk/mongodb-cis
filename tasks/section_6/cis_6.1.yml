@@ -1,0 +1,53 @@
+---
+- name: "6.1 | PATCH | Ensure that MongoDB uses a non-default port"
+  when:
+    - mongodb8_cis_rule_6_1
+    - mongodb8_cis_level_1
+  tags:
+    - level1
+    - automated
+    - patch
+    - rule_6.1
+    - network
+  block:
+    - name: "6.1 | PATCH | Ensure that MongoDB uses a non-default port | Check the site port"
+      ansible.builtin.assert:
+        that:
+          - mongodb8_cis_port | int >= 1024
+          - mongodb8_cis_port | int <= 65535
+          - mongodb8_cis_port | int != 27017
+        fail_msg: "6.1: set mongodb8_cis_port to 1024-65535, not 27017 (found '{{ mongodb8_cis_port }}')."
+        quiet: true
+
+    # RHEL 8/9 base policy confines mongod (mongod_t): it can only bind ports labelled mongod_port_t (D11).
+    - name: "6.1 | PATCH | Ensure that MongoDB uses a non-default port | Label the port for SELinux"
+      when:
+        - ansible_facts['selinux']['status'] | default('disabled') == 'enabled'
+        - mongodb8_cis_port | int not in mongodb8_cis_selinux_default_ports
+      block:
+        - name: "6.1 | PATCH | Ensure that MongoDB uses a non-default port | Install the SELinux management tools"
+          ansible.builtin.dnf:
+            name: policycoreutils-python-utils
+            state: present
+
+        - name: "6.1 | PATCH | Ensure that MongoDB uses a non-default port | Set mongod_port_t"
+          community.general.seport:
+            ports: "{{ mongodb8_cis_port | int }}"
+            proto: tcp
+            setype: mongod_port_t
+            state: present
+
+    - name: "6.1 | PATCH | Ensure that MongoDB uses a non-default port | Set net.port"
+      when: discovered_mongod_conf['net']['port'] | default(27017) | int != mongodb8_cis_port | int
+      ansible.builtin.copy:
+        dest: "{{ mongodb8_cis_conf_path }}"
+        content: "{{ discovered_mongod_conf | combine({'net': {'port': mongodb8_cis_port | int}}, recursive=true) | to_nice_yaml(indent=2) }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      notify: Restart mongod
+
+    - name: "6.1 | PATCH | Ensure that MongoDB uses a non-default port | Update the parsed config"
+      ansible.builtin.set_fact:
+        discovered_mongod_conf: "{{ discovered_mongod_conf | combine({'net': {'port': mongodb8_cis_port | int}}, recursive=true) }}"

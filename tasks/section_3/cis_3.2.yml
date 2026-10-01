@@ -1,0 +1,34 @@
+---
+- name: "3.2 | AUDIT | Ensure that role-based access control is enabled and configured appropriately"
+  when:
+    - mongodb8_cis_rule_3_2
+    - mongodb8_cis_level_1
+  tags:
+    - level1
+    - manual
+    - audit
+    - rule_3.2
+    - authorization
+  block:
+    - name: "3.2 | AUDIT | Ensure that role-based access control is enabled and configured appropriately | List users and roles"
+      community.mongodb.mongodb_shell:
+        eval: "db.getSiblingDB('admin').system.users.find({}, {_id: 0, user: 1, db: 1, roles: 1}).toArray()"
+        transform: json
+      register: discovered_3_2_users
+      changed_when: false
+      check_mode: false
+
+    - name: "3.2 | AUDIT | Ensure that role-based access control is enabled and configured appropriately | Report authorization"
+      ansible.builtin.debug:
+        msg: >-
+          3.2 REVIEW: security.authorization = {{ discovered_mongod_running_conf['security']['authorization'] | default('disabled') }}
+          (running config), {{ discovered_3_2_users['transformed_output'] | length }} user(s). Check each user's roles below.
+
+    - name: "3.2 | AUDIT | Ensure that role-based access control is enabled and configured appropriately | Report each user"
+      ansible.builtin.debug:
+        msg: >-
+          3.2 REVIEW: {{ item['user'] }}@{{ item['db'] }} roles:
+          {{ item['roles'] | map(attribute='role') | zip(item['roles'] | map(attribute='db')) | map('join', '@') | join(', ') or 'none' }}.
+      loop: "{{ discovered_3_2_users['transformed_output'] }}"
+      loop_control:
+        label: "{{ item['user'] }}@{{ item['db'] }}"
