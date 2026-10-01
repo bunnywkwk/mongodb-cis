@@ -126,3 +126,46 @@ fatal: [rhel10-mongo]: FAILED! => {"changed": false, "failures": ["No package mo
 **Fix:** build the setting **inside the same expression** that writes the file: `combine({'net': {'port': mongodb8_cis_port | int}}, recursive=true)`. Re-test on both versions: `port: 27018` (number), run 2 `changed=0`.
 
 **Prevent:** only put **literal** values (`true`, `false`, fixed text) in a rule's `vars:` settings dict. Anything computed from a variable goes inline in the `combine(...)`. Test every PATCH on **both** ansible-core versions before handing it over.
+
+## T-M7: mongod does not start after the SELinux extra loads MongoDB's module (2026-10-01, VM test T9)
+
+**Symptom** (lab VM at 192.168.122.83, RHEL 9.8, SELinux enforcing; `mongodb8_cis_selinux_policy: true`)
+```
+RUNNING HANDLER [mongodb8_cis : Wait for mongod to accept connections]
+fatal: [rhel8-mongo]: FAILED! => {"changed": false, "elapsed": 60, "msg": "Timeout when waiting for 127.0.0.1:27100"}
+```
+`systemctl status mongod`: `Main process exited, code=exited, status=14`. `/var/log/mongodb/mongod.log`:
+```
+"s":"E","c":"NETWORK","id":23024,"msg":"Failed to unlink socket file","attr":{"path":"/tmp/mongodb-27100.sock","error":"Permission denied"}
+"s":"F","c":"ASSERT","id":23091,"msg":"Fatal assertion","attr":{"msgid":40486,...}
+```
+`ausearch -m AVC`:
+```
+avc: denied { unlink } for comm="mongod" name="mongodb-27100.sock" scontext=system_u:system_r:mongod_t:s0
+     tcontext=system_u:object_r:unlabeled_t:s0 tclass=sock_file permissive=0 trawcon="system_u:object_r:mongod_tmp_t:s0"
+```
+
+**Cause:**
+- The RHEL 9 base policy's `mongodb` module labels mongod's socket files `mongod_tmp_t`
+  (`type_transition mongod_t tmp_t:sock_file mongod_tmp_t`).
+- The SELinux extra loads MongoDB's module at priority 200, which replaces the base module. MongoDB's module has no
+  `mongod_tmp_t` (its sockets stay `tmp_t`, `allow mongod_t tmp_t:sock_file { create setattr unlink }`).
+- The socket created by the running mongod keeps the now-unknown label → `unlabeled_t`. At the restart, the new mongod
+  must unlink it, SELinux denies it, and mongod aborts (exit 14) before opening its port.
+- Confirmed in a Rocky 9 container with `seinfo`/`sesearch`: `mongod_tmp_t` exists in the base policy and is gone after
+  loading MongoDB's module. Not caught by the earlier container tests: they cannot run mongod with SELinux active.
+- RHEL 10 has no base `mongodb` module (mongod unconfined before the extra), so its sockets are not `mongod_tmp_t`.
+
+**Fix (role):** `tasks/selinux.yml`, right after loading the module: find `mongodb-*.sock` in
+`net.unixDomainSocket.pathPrefix` (default `/tmp`) and remove them; mongod recreates them at the restart with the new
+label. Runs only in the run that loads the module. Re-tested in a Rocky 9 container: run 1 removes the socket, run 2
+`changed=0` and leaves the running mongod's socket alone.
+
+**Recover a host that already failed:**
+```bash
+sudo rm -f /tmp/mongodb-*.sock
+sudo systemctl start mongod && sudo systemctl status mongod --no-pager | head -5
+```
+
+**Prevent:** when replacing an SELinux policy module, check for files the old module labelled with types the new one
+does not define (`seinfo -t <type>` on both policies).

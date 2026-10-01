@@ -112,7 +112,6 @@ Section files are added to `main.yml` as they are written. Every prelim task is 
 | Check ansible-core version | Assert `>= 2.16.1` | Project floor = Lockdown's (D15) |
 | Check supported OS | Assert RedHat family, major in 8/9/10, x86_64 | Fail fast with a clear message (CLAUDE.md) |
 | Check the requested MongoDB version | Assert `mongodb8_cis_version` is in `mongodb8_cis_supported_versions` | Stops before an install of a series the benchmark does not cover (D22) |
-| Check ansible-core for RHEL 8 | Assert `< 2.17` on RHEL 8 | `dnf` breaks on RHEL 8 with 2.17+ (D15) |
 | Install MongoDB when requested | `import_tasks: install.yml` if `mongodb8_cis_install` (section 7) | Runs **before** detection, so detection sees the result; no duplicated detection code |
 | Gather installed packages | `package_facts` (rpm) | Detect, don't assume (CLAUDE.md app roles) |
 | Detect MongoDB server package | `discovered_mongodb_installed`, `discovered_mongodb_version` | `discovered_*` = Lockdown naming for audit results |

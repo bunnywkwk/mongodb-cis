@@ -63,6 +63,23 @@
               changed_when: true
               notify: Restart mongod
 
+            # RHEL 9 base module labels mongod's socket files mongod_tmp_t; MongoDB's module has no such type, so the
+            # restarted mongod may not unlink the old socket and aborts (fassert 40486). mongod recreates them on start.
+            - name: "SELINUX | PATCH | Confine mongod with SELinux | Find mongod socket files left by the old policy"
+              ansible.builtin.find:
+                paths: "{{ discovered_mongod_conf['net']['unixDomainSocket']['pathPrefix'] | default('/tmp') }}"
+                patterns: "mongodb-*.sock"
+                file_type: any
+              register: discovered_selinux_sockets
+
+            - name: "SELINUX | PATCH | Confine mongod with SELinux | Remove mongod socket files left by the old policy"
+              ansible.builtin.file:
+                path: "{{ item['path'] }}"
+                state: absent
+              loop: "{{ discovered_selinux_sockets['files'] }}"
+              loop_control:
+                label: "{{ item['path'] }}"
+
     - name: "SELINUX | PATCH | Confine mongod with SELinux | Label a non-default dbPath and log directory"
       when: item['path'] != item['default']
       community.general.sefcontext:

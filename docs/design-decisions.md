@@ -155,21 +155,18 @@ The benchmark marks these as Enterprise features. This role targets Enterprise, 
 - **4.1 and 4.2 check the same key.** Both require `TLS1_0,TLS1_1` in `net.tls.disabledProtocols` (S5/S6), at L2 and L1 respectively. Each rule keeps its own ID, toggle and block, so skipping one does not skip the other; whichever runs first fixes the key and the other then finds it compliant. Both only write when TLS is enabled (D25).
 - **Defaults per S6 "Default Value":** authorization disabled (2.1), `enableLocalhostAuthBypass` `true` (2.2), `javascriptEnabled` enabled (6.3). This agrees with the fresh-install state in platform-notes.
 
-## D15. RHEL 8: run it from ansible-core 2.16.1+; the role stays 2.16-compatible
+## D15. One control-node environment: ansible-core 2.16 for RHEL 8, 9 and 10
 
 - **Decision:**
-  - RHEL 8 targets are run from the separate ansible-core `>=2.16.1,<2.17` environment; RHEL 9/10 from the main 2.20 environment (see [../../docs/control-node-setup.md](../../docs/control-node-setup.md)).
-  - The role declares `min_ansible_version: "2.16.1"` in `meta/main.yml` and uses only 2.16 features.
-  - `prelim.yml` asserts:
-    1. `ansible_version.full is version('2.16.1', '>=')`: 2.16.0 and older are rejected.
-    2. When `ansible_facts['distribution_major_version'] == '8'`: `ansible_version.full is version('2.17', '<')`. The failure message points to the control-node doc.
-- **Why:**
-  - ansible-core 2.17+ doesn't support Python 3.6 on targets (S7).
-  - A newer Python on RHEL 8 doesn't help, because the `dnf` bindings are 3.6-only (control-node doc A2, A3).
-  - Every 2.16 patch release supports Python 3.6 targets. The floor is 2.16.1, not 2.16.0 (user choice, 2026-09-29). It matches Lockdown exactly: `ansible-lockdown/RHEL9-CIS` `meta/main.yml` has `min_ansible_version: 2.16.1`. The el8 env installs the newest patch anyway (control-node doc).
-  - Assert 2 catches the case where someone sets python3.12 on RHEL 8 and runs 2.17+. Facts would be gathered fine, but `dnf` would fail halfway through the run.
-- **Revised:** an earlier version of this decision said "python3.12 + `ansible_python_interpreter` + assert Python ≥ 3.9". That was dropped because the `dnf` bindings problem makes it fail.
-- **Open risk:** confirm on the RHEL 8 VM from the 2.16 env: `ansible.builtin.dnf` works, and the `mongod.conf` write works under SELinux enforcing.
+  - The role is run from one ansible-core `>=2.16.1,<2.17` environment for all targets (setup: [control-node-setup.md](control-node-setup.md)).
+  - The role declares `min_ansible_version: "2.16.1"` in `meta/main.yml`, uses only 2.16 features, and `prelim.yml` asserts `ansible_version.full is version('2.16.1', '>=')`.
+- **Why 2.16:**
+  - RHEL 8's system Python is 3.6. ansible-core 2.17+ does not support Python 3.6 on targets (S7), and a newer Python on RHEL 8 does not help, because the `dnf` bindings exist only for 3.6.
+  - 2.16 supports target Python 2.7 and 3.6–3.12, so one environment covers RHEL 8 (3.6), 9 (3.9) and 10 (3.12).
+  - The floor is 2.16.1, as in Lockdown (`ansible-lockdown/RHEL9-CIS` `meta/main.yml`: `min_ansible_version: 2.16.1`); `pip` installs the newest 2.16 patch anyway.
+- **Revised 2026-10-01 (user decision):** the second prelim assert (`< 2.17` when the target is RHEL 8) was removed. Every run comes from the 2.16 environment, so it always skipped. The requirement is documented in the README and in control-node-setup.md instead. Remaining risk, accepted: someone running 2.17+ against RHEL 8 is not stopped by the role; with the system Python 3.6 that fails at fact gathering, but with a newer Python forced on RHEL 8 it would only fail at the first `dnf` task.
+- **Known limit:** ansible-core 2.16 reached upstream end of life in July 2025 (no more security fixes). Controller Python must be 3.10–3.12.
+- **Tested:** the whole role ran from 2.16.19 on the lab VMs (RHEL 9.8 and RHEL 10). **RHEL 8 still to verify.**
 
 ## D16. Test plan follows the CIS certification grid (S6 columns E–G)
 
@@ -196,6 +193,7 @@ Column H ("exceptions") is where deviations from the benchmark text are recorded
 - **Why optional:** the CIS MongoDB 8 benchmark has no SELinux recommendation (S5); CLAUDE.md says never present an extra control as CIS. It is documented in the README as an extra.
 - **Limits:** the role labels only the paths and port it reads from `mongod.conf`. Other paths a site adds (backup dirs, a custom audit log path, certificates outside standard locations) are the site's job. MongoDB maintains the module, so each MongoDB or RHEL update needs a retest.
 - **Tested 2026-10-01** in containers (test-results "SELinux extra"); loading into a running kernel, labels and `mongod_t` at runtime: **to verify on the VMs.**
+- **Fixed 2026-10-01 after the first VM run (RHEL 9.8):** loading MongoDB's module removed the base module's `mongod_tmp_t`, so the restarted mongod could not unlink its old socket and aborted. The role now removes `mongodb-*.sock` right after loading the module (troubleshooting T-M7).
 - **Revised:** 2026-09-29 (twice: proposed, removed as out of scope, re-added as an optional extra, user decision); 2026-10-01: built on the host per S1, RHEL 8 handled separately after the container tests.
 
 ## D18. Level 1 / Level 2 selection

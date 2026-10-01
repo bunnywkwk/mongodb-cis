@@ -7,7 +7,7 @@ what they changed. Platforms: RHEL and compatible (Rocky, Alma, Oracle with RHCK
 
 ## Requirements
 
-- ansible-core **2.16.1+**. RHEL 8 targets must be run from ansible-core **2.16.x** (its Python 3.6 is not supported by 2.17+).
+- ansible-core **2.16.x** on the control node: it is the last version that can manage RHEL 8 (Python 3.6), so one environment covers RHEL 8, 9 and 10. Setup: [`docs/control-node-setup.md`](docs/control-node-setup.md).
 - Collections on the control node: `ansible-galaxy collection install -r requirements.yml` (`community.mongodb` for `mongodb_shell`; `community.general` 11.x for SELinux labels, the last line that supports ansible-core 2.16).
 - On the database servers: `mongosh` comes with the `mongodb-enterprise` package. With SELinux enabled, 6.1 and the SELinux extra install `policycoreutils-python-utils`.
 - MongoDB Enterprise 8.0 installed, or `mongodb8_cis_install: true` to add the official Enterprise repo and install it.

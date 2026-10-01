@@ -167,7 +167,7 @@ S7, target Python per ansible-core version:
 
 - RHEL 8's system Python (`/usr/libexec/platform-python`, `/usr/bin/python3`) is **3.6**, so ansible-core 2.17+ cannot manage it. RHEL 9 (3.9) and RHEL 10 (3.12) are fine.
 - **Installing python3.12 on RHEL 8 is not enough:** the `dnf` bindings exist only for Python 3.6, so `ansible.builtin.dnf` still fails with 2.17+.
-- **Chosen fix:** run RHEL 8 targets from a separate ansible-core **2.16** environment, pinned `>=2.16.1,<2.17` (resolves to the newest 2.16 patch). RHEL 8 then keeps its system Python, and no interpreter override is needed. Full steps and evidence: [../../docs/control-node-setup.md](../../docs/control-node-setup.md).
+- **Chosen fix:** run all targets (RHEL 8, 9, 10) from one ansible-core **2.16** environment, pinned `>=2.16.1,<2.17` (resolves to the newest 2.16 patch). RHEL 8 then keeps its system Python, and no interpreter override is needed (D15). Setup steps: [control-node-setup.md](control-node-setup.md).
 - **To verify on the RHEL 8 VM, from the 2.16 env:** `ansible <rhel8-host> -m ansible.builtin.dnf -a "name=tar state=present" --check` succeeds.
 
 ### pymongo (needed only by `community.mongodb` modules)

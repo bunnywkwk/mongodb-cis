@@ -34,16 +34,6 @@
       supported {{ mongodb8_cis_supported_versions | join(', ') }}.
     quiet: true
 
-- name: "PRELIM | AUDIT | Check ansible-core version for RHEL 8"
-  when: ansible_facts['distribution_major_version'] == '8'
-  ansible.builtin.assert:
-    that:
-      - ansible_version.full is version('2.17', '<')
-    fail_msg: >-
-      RHEL 8 needs ansible-core 2.16.x (found {{ ansible_version.full }}): the dnf module fails on RHEL 8
-      with 2.17+. Run from the el8 environment (docs/control-node-setup.md).
-    quiet: true
-
 - name: "PRELIM | PATCH | Install MongoDB when requested"
   when: mongodb8_cis_install
   ansible.builtin.import_tasks:
