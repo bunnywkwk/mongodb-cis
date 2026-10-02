@@ -1,0 +1,41 @@
+---
+- name: "5.2 | AUDIT | Ensure that audit filters are configured properly"
+  when:
+    - mongodb8_cis_rule_5_2
+    - mongodb8_cis_level_2
+  tags:
+    - level2
+    - manual
+    - audit
+    - rule_5.2
+    - logging
+  block:
+    - name: "5.2 | AUDIT | Ensure that audit filters are configured properly | Report"
+      ansible.builtin.debug:
+        msg: >-
+          5.2 REVIEW: {{ ('auditLog.filter = ' ~ (discovered_mongod_conf['auditLog']['filter']
+          | default('not set (all auditable events are recorded)')) ~ '. Check it against the audit requirements of the organisation.')
+          if discovered_mongod_conf['auditLog']['destination'] | default('') | length > 0
+          else 'auditing is off (no auditLog.destination), so there is no filter to review. See rule 5.1.' }}
+
+    - name: "5.2 | PATCH | Ensure that audit filters are configured properly | Set auditLog.filter (site value)"
+      when:
+        - mongodb8_cis_audit_filter | length > 0
+        - discovered_mongod_conf['auditLog']['destination'] | default('') | length > 0
+        - discovered_mongod_conf['auditLog']['filter'] | default('') != mongodb8_cis_audit_filter
+      tags:
+        - patch
+      block:
+        - name: "5.2 | PATCH | Ensure that audit filters are configured properly | Write auditLog.filter"
+          ansible.builtin.copy:
+            dest: "{{ mongodb8_cis_conf_path }}"
+            content: "{{ discovered_mongod_conf | combine({'auditLog': {'filter': mongodb8_cis_audit_filter}}, recursive=true) | to_nice_yaml(indent=2) }}"
+            owner: root
+            group: root
+            mode: "0644"
+            backup: true
+          notify: Restart mongod
+
+        - name: "5.2 | PATCH | Ensure that audit filters are configured properly | Update the parsed config"
+          ansible.builtin.set_fact:
+            discovered_mongod_conf: "{{ discovered_mongod_conf | combine({'auditLog': {'filter': mongodb8_cis_audit_filter}}, recursive=true) }}"

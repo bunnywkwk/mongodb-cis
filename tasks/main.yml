@@ -1,0 +1,20 @@
+---
+- name: Run preliminary checks and discovery
+  ansible.builtin.import_tasks:
+    file: prelim.yml
+  tags: always
+
+- name: Run section 1 - Installation and Patching
+  when: mongodb8_cis_section1
+  ansible.builtin.import_tasks:
+    file: section_1/main.yml
+
+- name: Run section 5 - Audit Logging
+  when: mongodb8_cis_section5
+  ansible.builtin.import_tasks:
+    file: section_5/main.yml
+
+- name: Run the section 7 - File Permissions
+  when: mongodb8_cis_section7
+  ansible.builtin.import_tasks:
+    file: section_7/main.yml

@@ -1,224 +1,107 @@
-# Code walkthrough — `mongodb8_cis`
+# Code walkthrough — `mongodb8_cis` (rebuild, branch `mongodb8-cis-rebuild`)
 
-How the role works, file by file, in the order a run goes through it. Read it next to the code.
-Each `Dn` points to the full reasoning and sources in [design-decisions.md](design-decisions.md).
+What each file and block does, why it's there, and where that comes from. Written as the role is rebuilt by hand,
+batch by batch. Each section ends with **Sources**: official documentation that backs the choice.
+
+| # | File | Status |
+|---|------|--------|
+| 1 | `.yamllint`, `.ansible-lint` | done |
+| 2 | `tasks/main.yml` (prelim only) | done |
+| 3 | `tasks/prelim.yml`: version and OS checks | done |
+| 4 | `tasks/prelim.yml`: detect MongoDB, read `mongod.conf`, read the service | next |
 
 ---
 
-## 1. The big picture
+## 1. Linting: `.yamllint` and `.ansible-lint`
 
-```
-ansible-playbook site.yml
-│
-├─ tasks/main.yml ............ the table of contents: runs the parts below, in this order
-│
-├─ tasks/prelim.yml .......... ALWAYS runs first, changes nothing (except the optional install)
-│    check Ansible version, OS, MongoDB version
-│    install MongoDB ......... only if mongodb8_cis_install: true  (tasks/install.yml)
-│    is MongoDB installed? ... no → stop this host cleanly
-│    read /etc/mongod.conf ... → discovered_mongod_conf   (every rule compares against this)
-│    read the mongod service → user, PID, limits
-│
-├─ tasks/section_1 … section_7   one folder per CIS section, one file per CIS rule
-│    each rule: is it switched on?  → compare  → fix only if wrong  (or just report)
-│
-├─ tasks/selinux.yml ......... optional extra, NOT a CIS rule (off by default)
-│
-└─ handlers/main.yml ......... at the end, only if something changed: restart mongod once, wait for it
+Two tools check the code **before** it runs on a server. Run both inside the role folder after every batch:
+
+```bash
+cd ~/ansible-cis/mongodb_cis
+yamllint . && ansible-lint --offline
 ```
 
-**A rule runs only if all its switches are on:** its section (`mongodb8_cis_section4`), its level
-(`mongodb8_cis_level_1` / `_level_2`), and its own toggle (`mongodb8_cis_rule_4_3`). All three are in `defaults/main.yml`.
+| Tool | Checks | Example of what it catches |
+|------|--------|----------------------------|
+| **yamllint** | The **YAML file format**: indentation, blank lines, spacing, `true`/`false` style | Two blank lines in a row, `yes` instead of `true`, a tab instead of spaces |
+| **ansible-lint** | **Ansible best practices**: module names, task names, risky patterns, deprecated features. It also runs yamllint's rules | A task without a name, `command:` without `changed_when`, `shell` where a module exists, missing FQCN (`copy` instead of `ansible.builtin.copy`) |
 
-## 2. The one pattern to understand: AUDIT → PATCH
+Neither tool runs anything on a host. They can't catch a **misspelled variable name**: that only fails when the task runs (see section 3).
 
-Almost every rule that changes something looks like rule 5.4 (`tasks/section_5/cis_5.4.yml`):
+### `.yamllint`
+
+| Setting | Does | Why |
+|---------|------|-----|
+| `extends: default` | Start from yamllint's standard rules | Change only what we must |
+| `ignore: .ansible/, molecule/` | Skip ansible-lint's cache and Molecule files | Not our role code |
+| `braces` / `brackets` `max-spaces-inside: 1` | Allows `{{ var }}` and `[ a ]` | **Required by ansible-lint**: it refuses a yamllint config without it |
+| `comments: min-spaces-from-content: 1` | `key: value # note` with one space is fine | Lockdown's setting |
+| `comments-indentation: disable` | Comments may be indented differently from code | Lockdown's setting |
+| `empty-lines: max: 1` | At most one blank line in a row | Compact files |
+| `indentation: spaces: 2, indent-sequences: consistent` | 2-space indent, list style the same within a file | Project style; Lockdown's setting |
+| `line-length: disable` | No 80-character limit | CIS titles in task names are long; Lockdown disables it too |
+| `octal-values: forbid-implicit/explicit-octal` | Rejects unquoted `mode: 0644` | Unquoted, YAML can read it as a number and set **wrong file permissions**. Always write `mode: "0644"` |
+| `truthy: allowed-values: ["true", "false"]` | Only `true`/`false`, not `yes`/`on` | Avoids YAML 1.1 surprises; the role's switches must be real booleans (D19) |
+
+### `.ansible-lint`
+
+| Setting | Does | Why |
+|---------|------|-----|
+| `profile: production` | The strictest of ansible-lint's rule sets (`min` → `basic` → `moderate` → `safety` → `shared` → `production`) | The role must be production-grade. Any lower profile would accept weaker code |
+| `exclude_paths: .ansible/, docs/` | Don't lint the cache or the Markdown docs | Not role code |
+| `--offline` (command line) | Don't try to download the collections from `requirements.yml` | They're already installed; avoids network errors |
+
+**Sources**
+- yamllint configuration and rules: https://yamllint.readthedocs.io/en/stable/configuration.html, https://yamllint.readthedocs.io/en/stable/rules.html
+- ansible-lint profiles: https://ansible.readthedocs.io/projects/lint/profiles/
+- ansible-lint configuration (`exclude_paths`, `offline`): https://ansible.readthedocs.io/projects/lint/configuring/
+- ansible-lint's yamllint requirements (`braces`, `octal-values`, `truthy`): https://ansible.readthedocs.io/projects/lint/rules/yaml/
+- Lockdown's own `.yamllint` (same settings): https://github.com/ansible-lockdown/RHEL9-CIS/blob/devel/.yamllint
+
+---
+
+## 2. `tasks/main.yml`: the table of contents
 
 ```yaml
-- name: "5.4 | PATCH | Ensure that new entries are appended to the end of the log file"   # CIS ID | type | exact CIS title
-  when:
-    - mongodb8_cis_rule_5_4                     # 1. switched on?
-    - mongodb8_cis_level_2                      # 2. its level on?
-    - discovered_mongod_conf['systemLog']['logAppend'] | default(false) is not true   # 3. AUDIT: is it wrong right now?
-  tags: [level2, automated, patch, rule_5.4, logging]   # lets you run/skip it: --tags rule_5.4
-  vars:
-    mongodb8_cis_5_4_settings: {systemLog: {logAppend: true}}   # the CIS value
-  block:
-    - name: "5.4 | PATCH | ... | Set systemLog.logAppend: true"   # 4. PATCH: write current config + CIS value
-      ansible.builtin.copy:
-        content: "{{ discovered_mongod_conf | combine(mongodb8_cis_5_4_settings, recursive=true) | to_nice_yaml(indent=2) }}"
-        ...
-      notify: Restart mongod                     # 5. ask for one restart at the end
-    - name: "5.4 | PATCH | ... | Update the parsed config"         # 6. remember the change for the next rules
-      ansible.builtin.set_fact:
-        discovered_mongod_conf: "{{ discovered_mongod_conf | combine(mongodb8_cis_5_4_settings, recursive=true) }}"
+- name: Run preliminary checks and discovery
+  ansible.builtin.import_tasks:
+    file: prelim.yml
+  tags: always
 ```
 
-| Step | In plain words | Why |
-|------|----------------|-----|
-| AUDIT (the `when:`) | "Is the setting already right?" Compared against the config prelim read | Already right → whole block skipped → file untouched, no restart. That's why a second run shows `changed=0` (D2) |
-| PATCH `copy` | Writes the **current** config plus the one CIS value | Keeps every site setting (dbPath, bindIp…). `lineinfile` can't safely edit nested YAML (D7). `backup: true` keeps the old file |
-| `notify` | Asks for a restart | mongod reads its config only at start. Several rules → still **one** restart at the end |
-| `set_fact` | Updates the in-memory config | The next rule builds on this change instead of overwriting it |
+| Key | Does | Why |
+|-----|------|-----|
+| `ansible.builtin.import_tasks` | Inserts `prelim.yml`'s tasks here when the playbook is **read** (static) | Static import lets `tags` and `when` apply to every task inside, and `--list-tasks` shows them. Lockdown imports its sections the same way |
+| `tags: always` | Runs prelim even when you choose tasks with `--tags` (e.g. `--tags rule_5.4`) | Every rule needs what prelim reads; without it, a tagged run would fail. `always` is a special Ansible tag for exactly this |
 
-Rules that **only report** (all Manual rules, and rules that can't be applied yet) are named `AUDIT` and print a
-`PASS` / `FAIL` / `REVIEW` / `NOT APPLICABLE` line with `debug`. They never change anything (D4).
+Each CIS section is added below this one when it's built.
 
-Recurring words:
-
-| Word | Meaning |
-|------|---------|
-| `discovered_*` | A fact the role **read** from the host (Lockdown naming) |
-| `combine(..., recursive=true)` | Merge two dicts; only the given keys change |
-| `changed_when: false` | "This task only reads, never report it as a change" |
-| `check_mode: false` | Run it even in `--check`, because it only reads (so the preview sees real data) |
-| `block:` | Group tasks under one `when:` / `tags:` |
+**Sources**
+- `import_tasks`: https://docs.ansible.com/ansible/latest/collections/ansible/builtin/import_tasks_module.html
+- Import vs include (static vs dynamic): https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_reuse.html#comparing-includes-and-imports-dynamic-and-static-re-use
+- Special tags `always` / `never`: https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_tags.html#special-tags-always-and-never
 
 ---
 
-## 3. Files that configure the role (no tasks)
+## 3. `tasks/prelim.yml`: checks before anything else
 
-| File | What's in it | Key points |
-|------|--------------|------------|
-| `meta/main.yml` | Name `bunnywkwk.mongodb8_cis`, EL 8/9/10, `min_ansible_version: "2.16.1"`, `collections:` | 2.16.1 = Lockdown's floor and the only ansible-core that runs on RHEL 8 (D15) |
-| `requirements.yml` | `community.mongodb` (only `mongodb_shell` is used), `community.general` 11.x | Installed on the **control node**; nothing extra on the DB servers (D13). Keep it: users and ansible-lint install from it |
-| `defaults/main.yml` | **Every** switch and site value, with comments | Users override them in `group_vars`, never by editing tasks. Write `true`/`false` unquoted (D19) |
-| `vars/main.yml` | Internal values: repo URL, package names, RPM default paths, values computed from the live config | Not for users. Paths come from the live config; RPM defaults are only fallbacks (D8) |
-| `.yamllint`, `.ansible-lint` | Lint rules (`production` profile) | Run lint inside the role folder |
-| `files/selinux/` | MongoDB's own SELinux module sources (GPL-2.0) | Only for the optional extra (section 8 below) |
+Every task here is named `PRELIM | AUDIT | …`: it only reads or checks, and **never changes the host**.
 
-**Switches that are off by default** because they can lock users out or break clients (D6):
-2.1 (login), 2.2 (no localhost bypass), 4.3 (require TLS), 4.4 (FIPS), 6.1 (new port), plus 2.3 (sharded clusters only).
-**Site values** CIS leaves to you: admin user/password (2.1), TLS files (4.3), port (6.1), audit destination (5.1),
-and two decisions: `mongodb8_cis_javascript_needed` (6.3), `mongodb8_cis_fix_db_path_permissions` (7.2) (D20).
-
----
-
-## 4. `tasks/main.yml`: the table of contents
-
-Runs prelim (tag `always`), then sections 1–7 in CIS order behind their section switches, then the SELinux extra.
-
-Sections 2 and 3 talk to the **database** (users, roles), so they sit in one `block` with **`module_defaults`**:
-the connection settings for `community.mongodb.mongodb_shell` (host, port, login, TLS) are written once there instead
-of in every task (D24). They come from the config mongod is **running** with, so they're still right while this run
-changes the port or turns on TLS.
-
-## 5. `tasks/prelim.yml`: checks and discovery
-
-| Step | Does | Why |
+| Task | Does | Why |
 |------|------|-----|
-| Gather minimal facts (only if missing) | OS, version, architecture | Works even with `gather_facts: false` |
-| Check ansible-core ≥ 2.16.1 | Stops with a clear message if older | D15 |
-| Check OS | RHEL family 8/9/10, x86_64 | Fail fast |
-| Check `mongodb8_cis_version` is 8.0 | The benchmark covers MongoDB 8 | D22 |
-| Install (if `mongodb8_cis_install`) | Runs `install.yml` (section 6 below) | Before detection, so detection sees the result |
-| Detect `mongodb-enterprise-server` | Installed? Which version? | Detect, don't assume |
-| Not installed → stop this host | Message + `end_host` | Clean skip, not a failure |
-| Check the installed version is 8.0.x | Stops on 7.x / 9.x | Wrong benchmark otherwise (D22) |
-| Read + parse `/etc/mongod.conf` | → `discovered_mongod_conf`, plus a copy of the **running** config | The shared AUDIT for all config rules (D7, D14) |
-| No deprecated `net.ssl` block | Stops before Section 4 | mongod refuses `net.ssl` and `net.tls` together |
-| Database login values | If authorization is already on, user/password must be set; password without spaces/quotes | Sections 2/3 must be able to log in |
-| Read the mongod service | User, PID, limits (read-only) | Used by 3.3, 6.2, 7.x and the report |
-| Show what was found | Version, config, dbPath, log, service user | Visible summary every run |
+| Gather minimal facts if the play skipped them | `ansible.builtin.setup` with `gather_subset: min`, only when `ansible_facts['os_family']` is missing | The checks below need the OS facts. This keeps the role working when a play sets `gather_facts: false`; `min` collects only the basics, so it's fast |
+| Check the ansible-core version | `assert` that `ansible_version.full is version('2.16.1', '>=')` | ansible-core 2.16 is the only version that manages RHEL 8 (Python 3.6) **and** RHEL 9/10. 2.16.1 is Lockdown's floor (D15) |
+| Check supported OS | `assert` RedHat family, major version in `mongodb8_cis_supported_os_majors` (8/9/10), architecture `x86_64` | Fail fast with a clear message instead of failing halfway on an unsupported system |
+| Check the requested MongoDB version | `assert` that `mongodb8_cis_version` is in `mongodb8_cis_supported_versions` (`8.0`) | The role implements the CIS MongoDB **8** Benchmark; another version needs another benchmark |
 
-## 6. `tasks/install.yml`: optional install
+How `assert` works: `that:` lists conditions that must all be **true** to continue. If one is false, the run stops for that host and prints `fail_msg`.
 
-Official MongoDB steps (S1), all declarative modules, so a second run changes nothing:
-1. Import the signing key.
-2. Add the Enterprise repo (URL built from the OS version).
-3. `dnf install mongodb-enterprise` (`present`, never upgrades).
-4. Start and enable mongod.
+`quiet` was left out on purpose: it only shortens the output of a **passing** assert. It doesn't hide any values, so it's purely cosmetic.
 
-Limitation: `--check` on a host **without** MongoDB fails at `dnf` (T-M5); install with a real run.
-
----
-
-## 7. The rules, section by section
-
-Type: **PATCH** = changes the host when wrong · **REPORT** = only prints a result · **DECISION** = reports, and fixes
-only if you set the decision variable.
-
-### Section 1: Installation and Patching (`tasks/section_1/`)
-
-| Rule | Lvl | Type | What it does |
-|------|-----|------|--------------|
-| 1.1 | L1 | REPORT | Prints the installed version and where to check for patches. Never upgrades |
-
-### Section 2: Authentication (`tasks/section_2/`), uses the database
-
-| Rule | Lvl | Type | What it does | Why / note |
-|------|-----|------|--------------|------------|
-| 2.1 | L1 | PATCH, **off by default** | Needs admin user + password → checks if that user exists (`mongodb_shell`) → creates it (role `root`) → sets `security.authorization: enabled` | User is created **before** login is required, so nobody is locked out (D26). Password task has `no_log` |
-| 2.2 | L1 | PATCH, **off by default** | Counts database users → stops if there are none → sets `setParameter.enableLocalhostAuthBypass: false` | Without a user, turning off the localhost exception would lock everyone out (D26) |
-| 2.3 | L2 | REPORT, off by default | Shows `clusterAuthMode` / `keyFile`, or "not applicable" on standalone | Sharded clusters only |
-
-### Section 3: Authorization (`tasks/section_3/`), all REPORT, read from the database
-
-| Rule | Lvl | Shows |
-|------|-----|-------|
-| 3.1 | L1 | Users with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` (PASS if none) |
-| 3.2 | L1 | Authorization on/off and every user with their roles |
-| 3.3 | L1 | Who mongod runs as (unit `User=` and the real process owner). PASS if not root |
-| 3.4 | L1 | Every user-defined role, its actions and inherited roles |
-| 3.5 | L2 | Users holding superuser/admin roles (`root`, `clusterAdmin`, …) |
-
-Each DB read is `mongodb_shell` with `changed_when: false` and `check_mode: false`: it only reads, so it also runs in `--check`.
-
-### Section 4: Data Encryption (`tasks/section_4/`), **4.3 runs first**
-
-`section_4/main.yml` runs 4.3 before 4.1/4.2/4.4: mongod refuses any `net.tls` option unless TLS is on (D25).
-
-| Rule | Lvl | Type | What it does |
-|------|-----|------|--------------|
-| 4.3 | L1 | PATCH, **off by default** | Checks both PEM files exist on the host → `net.tls.mode: requireTLS` + `certificateKeyFile` + `CAFile`. The role never creates certificates |
-| 4.1 | L2 | PATCH | Adds `TLS1_0,TLS1_1` to `net.tls.disabledProtocols` (keeps any others). If TLS is off: prints FAIL instead |
-| 4.2 | L1 | PATCH | Same setting as 4.1 (CIS lists it twice, at different levels); whichever runs first fixes it, the other then finds it compliant |
-| 4.4 | L2 | PATCH, **off by default** | `net.tls.FIPSMode: true`, only when TLS is on, otherwise prints FAIL |
-| 4.5 | L2 | REPORT | Encryption at rest on/off and the key management (KMIP or keyfile) |
-
-### Section 5: Audit Logging (`tasks/section_5/`)
-
-| Rule | Lvl | Type | What it does |
-|------|-----|------|--------------|
-| 5.1 | L1 | PATCH | If there is no `auditLog`, adds one (`syslog` by default; `file` needs JSON/BSON). Never replaces an existing one (D21) |
-| 5.2 | L2 | REPORT | Shows `auditLog.filter` (or "auditing off, see 5.1") |
-| 5.3 | L2 | PATCH | If `systemLog.quiet` is true → sets `false`. Fresh install: already compliant |
-| 5.4 | L2 | PATCH | If `systemLog.logAppend` isn't true → sets `true`. Fresh install: already compliant |
-
-### Section 6: OS Hardening (`tasks/section_6/`)
-
-| Rule | Lvl | Type | What it does |
-|------|-----|------|--------------|
-| 6.1 | L1 | PATCH, **off by default** | Checks `mongodb8_cis_port` (1024–65535, not 27017) → labels it `mongod_port_t` for SELinux (if enforcing and not a MongoDB default port) → sets `net.port`. The restart handler then waits on the **new** port (D11) |
-| 6.2 | L2 | REPORT | The six limits of the running service vs CIS (f, t, v, m = unlimited; n, u = 64000), from systemd (D14) |
-| 6.3 | L2 | DECISION | Shows `security.javascriptEnabled`. With `mongodb8_cis_javascript_needed: false` → sets it `false` (D20) |
-
-### Section 7: File Permissions (`tasks/section_7/`)
-
-| Rule | Lvl | Type | What it does |
-|------|-----|------|--------------|
-| 7.1 | L1 | REPORT | Mode/owner of `keyFile`, TLS key and CA file from `mongod.conf`, or "not applicable" if none |
-| 7.2 | L1 | DECISION | dbPath PASS/FAIL vs `0770`, owner = service user (RPM ships `0755` → FAIL). With `mongodb8_cis_fix_db_path_permissions: true` → fixes it (D20) |
-
----
-
-## 8. `tasks/selinux.yml`: optional extra, not CIS (off by default)
-
-Runs only with `mongodb8_cis_selinux_policy: true` and SELinux enabled (D17):
-
-| Step | Does |
-|------|------|
-| Install tools | `policycoreutils-python-utils` (+ `selinux-policy-devel` on RHEL 9/10) |
-| RHEL 9/10: build and load MongoDB's module | Copies `files/selinux/` to the host, builds `mongodb.pp`, loads it at priority 200, only if the sources changed or it isn't loaded yet. Removes old mongod socket files the new policy can't delete (T-M7) |
-| RHEL 8 | Message only: the base policy already confines mongod, and MongoDB's module doesn't build there |
-| Label non-default paths and port | `sefcontext` for a moved dbPath/log dir, `seport` for a non-default port |
-| `restorecon` | Applies the labels; counts as changed only if it printed something |
-| Report | The SELinux domain mongod runs as; expected `mongod_t` |
-
-## 9. `handlers/main.yml`: one restart, then a check
-
-Both handlers listen to `Restart mongod`. They run **once**, at the end, and only if a PATCH changed something:
-1. restart mongod;
-2. wait up to 60 s until it accepts connections on its (possibly new) address and port.
-
-If a config change broke mongod, the run fails **here**, right after the change. mongod has no config dry-run, so this is the check (D7).
+**Sources**
+- `setup` module, `gather_subset`: https://docs.ansible.com/ansible/latest/collections/ansible/builtin/setup_module.html
+- `assert` module (`that`, `fail_msg`, `quiet`): https://docs.ansible.com/ansible/latest/collections/ansible/builtin/assert_module.html
+- Version comparison test `version(…, '>=')`: https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_tests.html#comparing-versions
+- `ansible_version` magic variable: https://docs.ansible.com/ansible/latest/reference_appendices/special_variables.html
+- ansible-core target Python per version (why 2.16): https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html
+- CIS MongoDB 8 Benchmark v2.0.0, *Target Technology Details*: "MongoDB version/s 8.x"

@@ -1,0 +1,10 @@
+---
+
+- name: "SECTION | 7.1 | Ensure appropriate key file permission are set"
+  ansible.builtin.import_tasks:
+    file: cis_7.1.yml
+
+- name: "SECTION | 7.2 | Ensure appropriate database file permission are set."
+  ansible.builtin.import_tasks:
+    file: cis_7.2.yml
+

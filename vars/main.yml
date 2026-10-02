@@ -59,3 +59,13 @@ mongodb8_cis_shell_tls: "{{ discovered_mongod_running_conf['net']['tls']['mode']
 mongodb8_cis_shell_ca_file: "{{ discovered_mongod_running_conf['net']['tls']['CAFile'] | default('') }}"
 mongodb8_cis_shell_client_cert: >-
   {{ mongodb8_cis_shell_tls_certificate_key_file or discovered_mongod_running_conf['net']['tls']['certificateKeyFile'] | default('') }}
+
+# pymongo for community.mongodb's mongodb_info / mongodb_user (D13a): its own virtualenv on each server.
+# pymongo 4.9+ is fully compatible with MongoDB 8.0 and needs Python 3.9+ (RHEL 8's system Python is 3.6).
+mongodb8_cis_pymongo_venv: /opt/mongodb8_cis/venv
+mongodb8_cis_pymongo_spec: "pymongo>=4.9,<5"
+mongodb8_cis_python_bin: /usr/bin/python3.12
+mongodb8_cis_python_packages:
+  "8": [python3.12, python3.12-pip]
+  "9": [python3.12, python3.12-pip]
+  "10": [python3, python3-pip]
