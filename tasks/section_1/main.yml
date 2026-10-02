@@ -1,4 +1,0 @@
----
-- name: "SECTION | 1.1 | Ensure the appropriate MongoDB software version/patches are installed"
-  ansible.builtin.import_tasks:
-    file: cis_1.1.yml
