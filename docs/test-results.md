@@ -40,6 +40,19 @@ After run B, a plain-TCP `mongosh` was refused, and a TLS client without login g
 | AlmaLinux 10.2 | 2.20.7 | ✅ `changed=4` | ✅ `changed=0` | `200 mongodb` |
 | Rocky 8.10 | 2.16.19 | ✅ `changed=1` (`policycoreutils-python-utils` only) + RHEL 8 message | ✅ `changed=0` | `100 mongodb` (base) |
 
+## Lab runs T1–T10 on KVM VMs (2026-10-01)
+
+Full log, screenshots and the lab setup: test repo `github.com/bunnywkwk/mongodb8-cis-test`
+(`docs/test-runs.md`, `docs/test-environment.md`), ansible-core 2.16.19.
+
+| Host (real OS) | Tests | Result |
+|----------------|-------|--------|
+| RHEL 10 | T4–T10 | ✅ Level 1+2, risky rules (2.1, 2.2, 4.3, 4.4, 6.1), SELinux extra (`mongod_t`); every rerun `changed=0` |
+| RHEL 9.8 (named `rhel8-mongo` in the inventory) | T2–T9 | ✅ T2–T8; ❌ T9 found the socket bug T-M7 (fixed, not re-run on RHEL 9) |
+| **RHEL 8** | none | **Not tested yet.** The inventory IPs don't match the lab table, so the "rhel8" runs went to the RHEL 9 VM (its mongod log says *"RHEL release 9.8 (Plow)"*) |
+
+**Open:** RHEL 8 T2–T10, RHEL 9 T9–T10 with the fixed role, then the acceptance test below.
+
 ## Planned: acceptance test "as a real user" (after all rules are built)
 
 Act as a DBA who must harden MongoDB to CIS, using only the README + `defaults/main.yml`, never the tasks:

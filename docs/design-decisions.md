@@ -147,6 +147,27 @@ The benchmark marks these as Enterprise features. This role targets Enterprise, 
   1. First `community.mongodb` pymongo modules → dropped after checking EPEL (S8).
   2. Then `ansible.builtin.command: mongosh` → replaced by `mongodb_shell` on 2026-09-30 to follow the mentor's no-`command` rule.
 
+## D13a. Revised 2026-10-02: use the collection's pymongo modules, with pymongo in a venv on each server
+
+- **Decision (user):**
+  - Rules 2.1, 2.2, 3.1, 3.2 and 3.5 use `community.mongodb.mongodb_user` / `mongodb_info`, for more readable tasks. 2.1's user creation becomes one idempotent task (`state: present`, `update_password: on_create`).
+  - The role prepares each server:
+    1. installs Python 3.12 from the OS repos;
+    2. creates a venv `/opt/mongodb8_cis/venv` with `pymongo>=4.9,<5`;
+    3. runs the database tasks of sections 2 and 3 with `ansible_python_interpreter` = that venv.
+- **Exception, 3.4 keeps `mongodb_shell`:** `mongodb_info` reads roles with `rolesInfo` + `showBuiltinRoles` but **without** `showPrivileges` (collection 1.8.0 source, `get_roles_info`). CIS 3.4's audit is `rolesInfo … showPrivileges: true`, so only `mongodb_shell` can show what CIS asks for.
+- **Evidence:**
+  - MongoDB driver compatibility tables (`mongodb.com/docs/drivers/compatibility`): **pymongo 4.9+ is fully compatible with MongoDB 8.0**; 4.4–4.8 partially; pymongo 4.14–4.18 support CPython 3.9–3.14.
+  - EPEL pymongo is 3.10 (EL9, incompatible) and 4.8 (EL10, partial), so not usable.
+  - Python 3.12: `python3.12` in EL8 and EL9 AppStream (Rocky repodata checked), system `python3` on EL10.
+  - Collection compat check: requires pymongo ≥ 4 and MongoDB ≥ 4 (`mongodb_common.check_compatibility`), so 8.0 passes.
+  - TLS/login options: `login_*`, `tls`, `tlsCAFile`, `tlsCertificateKeyFile`, `connection_options`. `login_password` is `no_log`.
+- **Cost, accepted:**
+  - Every server needs PyPI (or an internal mirror) for the first run.
+  - The role installs Python 3.12 + pip packages on servers it hardens, documented in the README.
+  - pymongo must stay ≥ 4.9.
+- **Supersedes** D13's "no pymongo" choice. D13 stays as the record of the earlier reasoning.
+
 ## D14. What the CIS spreadsheet (S6) tells us about AUDIT steps
 
 - **Most automated audits are config-file reads.** S6 "Audit Procedure": 2.1, 2.2, 4.2, 4.3, 5.1, 5.3, 5.4 and 6.1 are all `cat /etc/mongod.conf | grep <key>`. Our shared AUDIT (D7: `slurp` + `from_yaml` → `discovered_mongod_conf`) checks the same keys, structurally. That is more reliable than `grep`, which can't tell a commented-out key or a key in the wrong section.
