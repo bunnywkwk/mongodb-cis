@@ -153,6 +153,7 @@ A VM with MongoDB 8.0: the summary, `changed=0`.
   ansible.builtin.systemd_service:
     name: "{{ mongodb8_cis_service }}"
     state: restarted
+    daemon_reload: true   # picks up systemd drop-ins written by the role (6.2)
 
 - name: Wait for mongod to accept connections
   listen: Restart mongod
@@ -481,7 +482,8 @@ Add to `tasks/main.yml` — section 1 **before** section 5, section 7 at the end
       ansible.builtin.debug:
         msg: >-
           7.1 {{ 'PASS' if (item['stat']['exists'] and item['stat']['mode'] in ['0600', '0400']
-          and item['stat']['pw_name'] == mongodb8_cis_service_user) else 'FAIL' }}:
+          and item['stat']['pw_name'] == mongodb8_cis_service_user
+          and item['stat']['gr_name'] == mongodb8_cis_service_user) else 'FAIL' }}:
           {{ item['item'] }} is {{ item['stat']['mode'] | default('MISSING') }}
           {{ item['stat']['pw_name'] | default('-') }}:{{ item['stat']['gr_name'] | default('-') }}
           (expected 0600 {{ mongodb8_cis_service_user }}:{{ mongodb8_cis_service_user }}).
@@ -654,23 +656,50 @@ Add to `tasks/main.yml` (before section 7):
     - rule_6.2
     - limits
   vars:
-    # CIS ulimit letters -> systemd: f=FSIZE, t=CPU, v=AS, n=NOFILE, m=RSS, u=NPROC
-    mongodb8_cis_6_2_limits:
-      LimitFSIZE: infinity
-      LimitCPU: infinity
-      LimitAS: infinity
-      LimitNOFILE: "64000"
-      LimitRSS: infinity
-      LimitNPROC: "64000"
-  ansible.builtin.debug:
-    msg: >-
-      6.2 {{ 'PASS' if discovered_mongod_service['status'][item.key] | default('') == item.value else 'REVIEW' }}:
-      {{ item.key }} = {{ discovered_mongod_service['status'][item.key] | default('unknown') }} (CIS: {{ item.value }}).
-  loop: "{{ mongodb8_cis_6_2_limits | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-```
+    # true when what systemd applies to mongod now (prelim) differs from mongodb8_cis_resource_limits.
+    mongodb8_cis_6_2_drift: >-
+      {{ mongodb8_cis_resource_limits.keys() | map('extract', discovered_mongod_service['status']) | list
+         != mongodb8_cis_resource_limits.values() | map('string') | list }}
+  block:
+    - name: "6.2 | AUDIT | Ensure that operating system resource limits are set for MongoDB | Report each limit"
+      ansible.builtin.debug:
+        msg: >-
+          6.2 {{ 'PASS' if discovered_mongod_service['status'][item.key] | default('') == item.value | string else 'REVIEW' }}:
+          {{ item.key }} = {{ discovered_mongod_service['status'][item.key] | default('unknown') }} (expected {{ item.value }}).
+      loop: "{{ mongodb8_cis_resource_limits | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
 
+    # CIS remediation: set the limits, then restart mongod. Done as a systemd drop-in; the RPM's unit file is not edited.
+    - name: "6.2 | PATCH | Ensure that operating system resource limits are set for MongoDB | Set the limits (site decision)"
+      when:
+        - mongodb8_cis_fix_resource_limits
+        - mongodb8_cis_6_2_drift
+      tags:
+        - patch
+      block:
+        - name: "6.2 | PATCH | Ensure that operating system resource limits are set for MongoDB | Create the drop-in directory"
+          ansible.builtin.file:
+            path: "{{ mongodb8_cis_limits_dropin | dirname }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: "6.2 | PATCH | Ensure that operating system resource limits are set for MongoDB | Write the limits drop-in"
+          ansible.builtin.copy:
+            dest: "{{ mongodb8_cis_limits_dropin }}"
+            content: |
+              # Managed by mongodb8_cis (CIS 6.2)
+              [Service]
+              {% for name, value in mongodb8_cis_resource_limits.items() %}
+              {{ name }}={{ value }}
+              {% endfor %}
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Restart mongod
+```
 `tasks/section_6/cis_6.3.yml`
 ```yaml
 ---
@@ -720,7 +749,7 @@ Add to `tasks/main.yml` (before section 7):
 | Rule | Type | Does |
 |------|------|------|
 | 6.1 L1 | PATCH, **off** | Checks `mongodb8_cis_port` (1024–65535, not 27017) → SELinux label `mongod_port_t` → `net.port`. Port built inside `combine()` so it stays a number on 2.16 |
-| 6.2 L2 | REPORT | Six limits from systemd vs CIS |
+| 6.2 L2 | REPORT + optional fix | Six limits from systemd vs `mongodb8_cis_resource_limits` (CIS values by default): PASS/REVIEW; with `mongodb8_cis_fix_resource_limits: true` and drift → systemd drop-in + restart |
 | 6.3 L2 | DECISION | Shows `javascriptEnabled`; disables it only with `mongodb8_cis_javascript_needed: false` |
 
 **Test:** `mongodb8_cis_rule_6_1: true`, `mongodb8_cis_port: 47017` → mongod back on 47017 with SELinux enforcing; rerun `changed=0`. Revert the VM after.

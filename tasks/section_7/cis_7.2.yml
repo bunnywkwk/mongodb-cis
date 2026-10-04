@@ -1,5 +1,5 @@
 ---
-- name: "7.2 | AUDIT | Ensure approriate database file permission are set."
+- name: "7.2 | AUDIT | Ensure appropriate database file permissions are set."
   when:
     - mongodb8_cis_rule_7_2
     - mongodb8_cis_level_1
@@ -12,11 +12,12 @@
   vars:
     mongodb8_cis_7_2_db_path: "{{ discovered_mongod_conf['storage']['dbPath'] | default(mongodb8_cis_default_db_path) }}"
   block:
-    - name: "7.2 | AUDIT | Ensure appropriate database file permission are set | Get dbPath permmsion"
+    - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set. | Get dbPath permissions"
       ansible.builtin.stat:
         path: "{{ mongodb8_cis_7_2_db_path }}"
       register: discovered_db_path
-    - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set | Report"
+
+    - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set. | Report"
       ansible.builtin.debug:
         msg: >-
           7.2 {{ 'PASS' if (discovered_db_path.stat.mode == '0770'
@@ -25,7 +26,8 @@
           {{ mongodb8_cis_7_2_db_path }} is {{ discovered_db_path.stat.mode }}
           {{ discovered_db_path.stat.pw_name }}:{{ discovered_db_path.stat.gr_name }}
           (expected 0770 {{ mongodb8_cis_service_user }}:{{ mongodb8_cis_service_user }}).
-    - name: "7.2 | PATCH | Ensure appropriate database file permission are set. | Set 0770 and owner (site decision)"
+
+    - name: "7.2 | PATCH | Ensure appropriate database file permissions are set. | Set 0770 and owner (site decision)"
       when: mongodb8_cis_fix_db_path_permissions
       ansible.builtin.file:
         path: "{{ mongodb8_cis_7_2_db_path }}"

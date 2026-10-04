@@ -9,12 +9,56 @@
   ansible.builtin.import_tasks:
     file: section_1/main.yml
 
+- name: Prepare database access for section 2 and 3 (used pymongo module)
+  when: mongodb8_cis_section2 or mongodb8_cis_section3
+  ansible.builtin.import_tasks:
+    file: pymongo.yml
+
+- name: Run section 2 and 3 - Authentication and Authorization
+  vars:
+    # activating the virtualend whein pymongo installed for section2 and section3 to run
+    ansible_python_interpreter: "{{ mongodb8_cis_pymongo_venv }}/bin/python"
+  module_defaults:
+    community.mongodb.mongodb_info: &mongodb8_cis_login
+      login_host: "{{ mongodb8_cis_shell_host }}"
+      login_port: "{{ mongodb8_cis_shell_port | int }}"
+      login_database: admin
+      login_user: "{{ mongodb8_cis_admin_user if mongodb8_cis_shell_auth else omit }}"
+      login_password: "{{ mongodb8_cis_admin_password if mongodb8_cis_shell_auth else omit }}"
+      tls: "{{ mongodb8_cis_shell_tls }}"
+      tlsCAFile: "{{ mongodb8_cis_shell_ca_file if mongodb8_cis_shell_tls and mongodb8_cis_shell_ca_file | length > 0 else omit }}"
+      tlsCertificateKeyFile: "{{ mongodb8_cis_shell_client_cert if mongodb8_cis_shell_tls and mongodb8_cis_shell_client_cert | length > 0 else omit }}"
+
+      # The role talks to its own mongod on this host; certificates are usually issued for the FQDN, not this address.
+      connection_options: "{{ [{'tlsAllowInvalidHostnames': true}] if mongodb8_cis_shell_tls else omit }}"
+    community.mongodb.mongodb_user: *mongodb8_cis_login
+    community.mongodb.mongodb_shell:
+      db: admin
+      login_host: "{{ mongodb8_cis_shell_host }}"
+      login_port: "{{ mongodb8_cis_shell_port | int }}"
+      login_database: admin
+      login_user: "{{ mongodb8_cis_admin_user if mongodb8_cis_shell_auth else omit }}"
+      login_password: "{{ mongodb8_cis_admin_password if mongodb8_cis_shell_auth else omit }}"
+      tls: "{{ mongodb8_cis_shell_tls }}"
+      ssl_ca_certs: "{{ mongodb8_cis_shell_ca_file if mongodb8_cis_shell_tls and mongodb8_cis_shell_ca_file | length > 0 else omit }}"
+      ssl_keyfile: "{{ mongodb8_cis_shell_client_cert if mongodb8_cis_shell_tls and mongodb8_cis_shell_client_cert | length > 0 else omit }}"
+      additional_args: "{{ {'tlsAllowInvalidHostnames': true} if mongodb8_cis_shell_tls else omit }}"
+
+- name: Run secrtion 3 - Authorization
+  ansible.builtin.import_tasks:
+    file: section_3/main.yml
+
 - name: Run section 5 - Audit Logging
   when: mongodb8_cis_section5
   ansible.builtin.import_tasks:
     file: section_5/main.yml
 
-- name: Run the section 7 - File Permissions
+- name: Run section 6 -OS Hardening
+  when: mongodb8_cis_section7
+  ansible.builtin.import_tasks:
+    file: section_6/main.yml
+
+- name: Run section 7 - File Permissions
   when: mongodb8_cis_section7
   ansible.builtin.import_tasks:
     file: section_7/main.yml

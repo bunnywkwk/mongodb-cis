@@ -1,5 +1,5 @@
 ---
-- name: "1.1 | AUDIT | Ensure the appropriate MongoDB software version/patch are installed"
+- name: "1.1 | AUDIT | Ensure the appropriate MongoDB software version/patches are installed"
   when:
     - mongodb8_cis_rule_1_1
     - mongodb8_cis_level_1
@@ -12,5 +12,5 @@
   ansible.builtin.debug:
     msg: >-
       1.1 REVIEW: installed MongoDB server {{ discovered_mongodb_version }}. Compare with the latest
-      {{ mongodb8_cis_version }}.x release and the secuirty alerts at https://www.mongodb.com/alerts.
-      The role never upgrades automatically
+      {{ mongodb8_cis_version }}.x release and the security alerts at https://www.mongodb.com/alerts.
+      The role never upgrades automatically.

@@ -93,6 +93,14 @@ mongodb8_cis_rule_6_1: false
 mongodb8_cis_port: ""                   # ↳ 1024-65535, not 27017, e.g. 47017 (CIS: organisation defined)
 # 6.2 (L2, Manual) Ensure that operating system resource limits are set for MongoDB
 mongodb8_cis_rule_6_2: true
+mongodb8_cis_fix_resource_limits: false  # ↳ true = write the limits below as a systemd drop-in for mongod (+ restart) when they differ
+mongodb8_cis_resource_limits:            # ↳ CIS values; change one to your site's need (e.g. LimitNOFILE: 128000)
+  LimitFSIZE: infinity                   #   f  file size
+  LimitCPU: infinity                     #   t  cpu time
+  LimitAS: infinity                      #   v  virtual memory
+  LimitNOFILE: 64000                     #   n  open files
+  LimitRSS: infinity                     #   m  memory size
+  LimitNPROC: 64000                      #   u  processes/threads
 # 6.3 (L2, Manual) Ensure that server-side scripting is disabled if not needed
 # WARNING: false blocks $where, mapReduce, $function and $accumulator for all apps.
 mongodb8_cis_rule_6_3: true

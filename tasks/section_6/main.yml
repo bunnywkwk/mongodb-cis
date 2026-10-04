@@ -1,0 +1,12 @@
+---
+- name: "SECTION | 6.1 | Ensure that MongoDB uses a non-default port"
+  ansible.builtin.import_tasks:
+    file: cis_6.1.yml
+
+- name: "SECTION | 6.2 | Ensure that operating system resource limits are set for MongoDB"
+  ansible.builtin.import_tasks:
+    file: cis_6.2.yml
+
+- name: "SECTION | 6.3 | Ensure that server-side scripting is disabled if not needed"
+  ansible.builtin.import_tasks:
+    file: cis_6.3.yml

@@ -25,6 +25,8 @@ mongodb8_cis_package: mongodb-enterprise
 mongodb8_cis_server_package: mongodb-enterprise-server
 mongodb8_cis_service: mongod
 mongodb8_cis_conf_path: /etc/mongod.conf
+# 6.2 limits drop-in (systemd reads <unit>.service.d/*.conf; the RPM's unit file stays untouched).
+mongodb8_cis_limits_dropin: "/etc/systemd/system/{{ mongodb8_cis_service }}.service.d/mongodb8_cis-limits.conf"
 
 # RPM defaults (S3). Fallbacks only: live values are read from mongod.conf (D8).
 mongodb8_cis_default_db_path: /var/lib/mongo

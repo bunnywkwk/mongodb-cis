@@ -1,5 +1,5 @@
 ---
-- name: "7.1 | AUDIT | Ensure appropriate key file permission are set"
+- name: "7.1 | AUDIT | Ensure appropriate key file permissions are set"
   when:
     - mongodb8_cis_rule_7_1
     - mongodb8_cis_level_1
@@ -22,31 +22,31 @@
       loop: "{{ mongodb8_cis_7_1_files }}"
       register: discovered_7_1_stat
 
-    - name: "7.1 | AUDIT | Ensure appropriate key file permission are set | Report when none configured"
+    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Report when none configured"
       when: mongodb8_cis_7_1_files | length == 0
       ansible.builtin.debug:
         msg: "7.1 NOT APPLICABLE: no keyFile, certificateKeyFile or CAFile in {{ mongodb8_cis_conf_path }}."
 
-    - name: "7.1 | AUDIT | Ensure appropriate key file permission are set | Report each file"
-      loop: "{{ discovered_7_1_stat['result'] }}"
+    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Report each file"
+      loop: "{{ discovered_7_1_stat['results'] }}"
       loop_control:
         label: "{{ item['item'] }}"
       ansible.builtin.debug:
         msg: >-
           7.1 {{ 'PASS' if (item['stat']['exists'] and item['stat']['mode'] in ['0600', '0400']
-          and item['stat']['pw_name'] == mongodb8_cis_service_user) else 'FAIL' }}:
+          and item['stat']['pw_name'] == mongodb8_cis_service_user
+          and item['stat']['gr_name'] == mongodb8_cis_service_user) else 'FAIL' }}:
           {{ item['item'] }} is {{ item['stat']['mode'] | default('MISSING') }}
           {{ item['stat']['pw_name'] | default('-') }}:{{ item['stat']['gr_name'] | default('-') }}
           (expected 0600 {{ mongodb8_cis_service_user }}:{{ mongodb8_cis_service_user }}).
 
-    # CIS remediation: if file exist set the correct permission not only report it.
-    # In the CIS benchmark this is listed manual
+    # CIS remediation: chmod 600, owned by the mongo user. Only files that exist; the role never creates them.
     - name: "7.1 | PATCH | Ensure appropriate key file permissions are set | Set 0600 and owner (site decision)"
       when:
         - mongodb8_cis_fix_key_file_permissions
-        - item['stat']['exist']
+        - item['stat']['exists']
       ansible.builtin.file:
-        path: "{{ item[item] }}"
+        path: "{{ item['item'] }}"
         owner: "{{ mongodb8_cis_service_user }}"
         group: "{{ mongodb8_cis_service_user }}"
         mode: "0600"

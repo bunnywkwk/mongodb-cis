@@ -51,8 +51,8 @@ Context for an AI assistant (or person) continuing this work on another device. 
 | 2 | rest of `prelim.yml` | ✅ done (fixed by the assistant: install hook moved after the version check) |
 | 3 | `install.yml`, `handlers/main.yml` | ✅ done |
 | 4 | Section 5 (5.1–5.4), incl. new 5.2 filter | ✅ done, lint clean (fixed by the assistant) |
-| 5 | Section 1 + Section 7 (1.1, 7.1, 7.2) | 🟡 **in progress**: `cis_7.2.yml` unfinished (stops at line 16); lint: newline at end of `section_1/main.yml` and `cis_7.2.yml`, extra blank line in `section_7/main.yml`. `cis_1.1.yml`/`cis_7.1.yml` differ from the guide → re-check against `docs/build-guide.md` (7.1 has the new PASS/FAIL report + optional fix task) |
-| 6 | Section 6 | ⏳ |
+| 5 | Section 1 + Section 7 (1.1, 7.1, 7.2) | ✅ done, lint clean (typos fixed by the assistant 2026-10-03: 7.1 `results`/`exists`/`item['item']`) |
+| 6 | Section 6 | 🟡 **in progress** (2026-10-03): user typing `cis_6.1.yml`/`cis_6.2.yml`. 6.2 was upgraded (site variable + drop-in) → retype it from the guide; retype the handler (`daemon_reload: true`) |
 | 7 | `pymongo.yml`, sections 2+3 block, prelim login check, Section 3 | ⏳ |
 | 8 | Section 2 | ⏳ |
 | 9 | Section 4 + prelim `net.ssl` check | ⏳ |
@@ -69,6 +69,7 @@ Context for an AI assistant (or person) continuing this work on another device. 
 - `.yamllint`, `.ansible-lint`: restored.
 - `docs/build-guide.md` (all batches), `docs/code-walkthrough.md` (lint + main + prelim, with sources), `docs/section5.md` (Section 5 summary), this file.
 - The user deleted the old `docs/` on this branch. `main` still has `docs/cis-requirements.md` (23-rule checklist with "Verify on the VM" commands; restore with `git checkout main -- docs/cis-requirements.md`; its 2.x/3.x rows need updating to the pymongo modules).
+- 2026-10-03: new `docs/design-decisions.md` for the rebuild (same D-numbers as `main`, D0 + D13a new, D11 has the port-range evidence), `docs/reading-config.md` (how `[...]`, `default`, `combine`, `set_fact` work, tested), `docs/simplicity-review.md` (why every line is there).
 
 ## 6. Environment
 
@@ -81,3 +82,13 @@ Context for an AI assistant (or person) continuing this work on another device. 
 - `mongodb8-cis-test` (public) contains **private keys** (`pki/*.key`) and a plaintext DB password → regenerate certs, change the password, purge `pki/` from history, use Ansible Vault, and gitignore `pki/` and `collections/`.
 - In the KVM lab the inventory names and IPs were swapped, so **RHEL 8 was never actually tested**. Verify with `ansible mongodb -m setup -a 'filter=ansible_distribution*'`.
 - Offered but not done: a README section with a kickstart "new build" `group_vars` preset (all risky rules on + site values).
+
+## 8. Pick up here (end of 2026-10-03)
+
+- Batch 6 open fixes for the user: `tasks/main.yml` section 6 import uses `when: mongodb8_cis_section7` (should be `section6`);
+  `cis_6.1.yml` missing final newline; `cis_6.2.yml` → retype from the guide (new version); handler `daemon_reload: true`.
+- Offered, not done: change the `mongodb8_cis_port` example 47017 (inside the ephemeral range 32768–60999) to e.g. 27117 + note in D11;
+  add the `| int` findings (`"27017" != 27017` is True) to `reading-config.md`; catch up `code-walkthrough.md` for batches 2–5;
+  RHEL 9 port/data labels not captured in `test-results.md`.
+- CLAUDE.md says the workstation is AlmaLinux 10, but it reports Fedora 44 (`selinux-policy-targeted-44.9-1.fc44`). Ask the user.
+- Today's lab VMs were reached on 192.168.122.x (libvirt), hosts `rhel8-pc`, `rhel9-pc`, `rhel10-pc`.
