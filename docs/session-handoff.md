@@ -16,7 +16,7 @@ Read this when you come back to `main` after testing the rebuild branch. The reb
 Same layout, rule names, defaults, profiles and docs on both, so the test project works with either branch by changing
 one line (`version:` in `requirements.yml`).
 
-## 2. What changed on `main` today (2026-10-05, not committed yet)
+## 2. What changed on `main` on 2026-10-05 (commit `da298cf`)
 
 | File | Change |
 |------|--------|
@@ -79,3 +79,14 @@ or pymongo (structured output, `mongodb_user` for 2.1)? Which branch becomes the
 - Public `mongodb-cis`: old commit `7543959` still serves the CIS PDF → recreate the GitHub repo.
 - Public `mongodb8-cis-test`: `pki/*.key` and a plaintext password in history.
 - RHEL 8 never tested for real.
+
+## 6. Review against the benchmark (2026-10-05, after `da298cf`)
+
+- All 23 recommendations checked against the PDF: task title, level gate/tag, Automated/Manual tag, AUDIT/PATCH type,
+  `rule_<id>` tag → 23/23. Audit pass values and remediation settings match each rule's PDF text.
+- Coverage: 10 Automated PATCH + 6 Manual with an opt-in fix + 7 report-only (1.1, 2.3, 3.2–3.5, 4.5; why: D29). 0 missing.
+- Docs trimmed: `build-sequence.md` (rebuild-by-hand plan, pymongo) and empty `evidence.md` removed; the duplicated
+  "how to check compliance" part of `cis-requirements.md` now points to `compliance-test.md`; D13a marked rebuild-only.
+- `compliance-test.md`: per-host columns (R8/R9/R10), S0 = select the role version in the test project.
+- Ready for the compliance test. Not yet VM-tested on `main`: the five ported options, RHEL 8 overall, FIPS (4.4) on RHEL 10.
+- Added `docs/sections.md` (every section + the `vars:` in each rule) and `docs/reading-config.md` (from the rebuild, + `| int`).

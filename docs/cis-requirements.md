@@ -14,53 +14,10 @@ How to read a row:
   - "off" means the rule's toggle defaults to `false` (risky).
 - **Verify:** run on the VM after the role, to confirm the result yourself (not trusting the role's own output).
 
-## How to check that a hardened database is compliant
+## How to prove compliance
 
-Three levels, from quick to independent. Use all three for the acceptance test.
-
-| Level | How | Proves |
-|-------|-----|--------|
-| 1. Role report | Run the role, then run it **again**: the second run must show `changed=0`. Read every `PASS` / `FAIL` / `REVIEW` / `NOT APPLICABLE` line (`grep -E '[0-9]\.[0-9] (PASS\|FAIL\|REVIEW\|NOT APPLICABLE)'` on the output) | the role thinks the host is compliant, and it is stable |
-| 2. CIS audit by hand | On the server, run the **Verify** command of every row below (taken from each rule's *Audit* section in the PDF) and tick the PDF's *Appendix: Summary Table* "Set Correctly Yes/No" | the real state matches CIS, without trusting the role |
-| 3. Independent scan (optional) | CIS-CAT Pro Assessor (CIS SecureSuite members) or Tenable/Nessus with the CIS MongoDB 8 audit file | a score from a tool that didn't write the config |
-
-**What "compliant" means here:**
-- Every **Automated** rule (2.1, 2.2, 4.1–4.4, 5.1, 5.3, 5.4, 6.1) shows its pass value. 2.3 is **not applicable** on a standalone mongod.
-- Every **Manual** rule has been reviewed by a person: either PASS, or fixed (site variable or
-  [manual-remediation.md](manual-remediation.md)), or recorded as an accepted exception (who, why, approved by).
-- Level 1 = the 13 L1 rules. Level 2 = all 23 rules (Level 2 includes Level 1).
-
-**Acceptance test with `mongodb8-cis-test`** (fresh VM, then once per RHEL version):
-
-1. Defaults only (Level 1, risky rules off): run, rerun (`changed=0`), save the report. Expected: FAIL/REVIEW on the
-   risky rules that are off, that is what "safe by default" looks like.
-2. Full benchmark: `group_vars` with `mongodb8_cis_level_2: true`, the risky rules on and their site values
-   (admin user/password from Vault, TLS PEM + CA, port), plus the site decisions you want. Run, rerun (`changed=0`).
-3. Run every **Verify** command below on the VM; record results and screenshots in [test-results.md](test-results.md).
-4. Fix or accept the remaining Manual REVIEW items by hand.
-
-```yaml
-# group_vars/mongodb.yml: full-benchmark example (values are examples)
-mongodb8_cis_level_2: true
-mongodb8_cis_rule_2_1: true
-mongodb8_cis_rule_2_2: true
-mongodb8_cis_admin_user: dbadmin
-mongodb8_cis_admin_password: "{{ vault_mongodb_admin_password }}"
-mongodb8_cis_rule_4_3: true
-mongodb8_cis_rule_4_4: true
-mongodb8_cis_tls_certificate_key_file: /etc/pki/mongodb/server.pem
-mongodb8_cis_tls_ca_file: /etc/pki/mongodb/ca.pem
-mongodb8_cis_rule_6_1: true
-mongodb8_cis_port: 27117
-mongodb8_cis_fix_resource_limits: true
-mongodb8_cis_javascript_needed: false          # only if your apps don't use server-side JS
-mongodb8_cis_fix_key_file_permissions: true
-mongodb8_cis_fix_db_path_permissions: true
-```
-
-After step 2, connect with TLS and the new port, e.g.
-`mongosh --tls --tlsCAFile /etc/pki/mongodb/ca.pem --tlsCertificateKeyFile /etc/pki/mongodb/server.pem --tlsAllowInvalidHostnames --port 27117 -u dbadmin --authenticationDatabase admin`
-(written as `mongosh …` below).
+Run the role, rerun it (`changed=0`), then check every rule on the host with its CIS Audit command:
+[compliance-test.md](compliance-test.md). How to pick a profile and set site values: [README](../README.md).
 
 ## How each row was derived from the PDF
 
@@ -82,21 +39,6 @@ Not implemented on purpose:
 - Anything not in Audit/Remediation.
 
 "Organisation defined" values become variables the user fills in.
-
-## How a hardening role is used (what we're building)
-
-1. **Out of the box it's safe:** CIS Level 1. Every rule that can't break anything runs; Manual rules only report;
-   risky rules (they can lock you out or break clients) are **off**.
-2. **The user only edits variables**, never tasks, in `group_vars`:
-   - turn on Level 2 or risky rules;
-   - give the **site values CIS leaves open** (admin user, TLS files, port, audit destination);
-   - make the **decisions** CIS leaves to the site (6.3, 7.2).
-3. **Every run is idempotent:**
-   - The role reads the real state first and changes only what is wrong (AUDIT → PATCH), so a second run shows `changed=0`.
-   - The run output is the compliance report (PASS / FAIL / REVIEW lines).
-
-So yes: **defaults + a few site values** is exactly the goal. A site that only installs the role gets Level 1
-without risk; a site that fills in its values gets the full benchmark.
 
 ---
 
@@ -167,7 +109,7 @@ without risk; a site that fills in its values gets the full benchmark.
 | Recommendations in the benchmark | **23** | 13 Level 1, 10 Level 2 |
 | Automated, role fixes them (PATCH) | 10 | 2.1, 2.2, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 |
 | Automated, reported (doesn't apply to standalone) | 1 | 2.3 (sharded clusters) |
-| Manual, role reports | 6 | 1.1, 3.2–3.5, 4.5 ([manual-remediation.md](manual-remediation.md)) |
+| Manual, role reports | 6 | 1.1, 3.2–3.5, 4.5 (why: D29; hand fixes: [manual-remediation.md](manual-remediation.md)) |
 | Manual, report + optional site decision | 6 | 3.1, 5.2, 6.2, 6.3, 7.1, 7.2 |
 | Off by default (risky / not applicable) | 6 | 2.1, 2.2, 2.3, 4.3, 4.4, 6.1 |
 | **Not covered** | **0** | |

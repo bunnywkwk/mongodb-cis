@@ -117,6 +117,8 @@ optional extra; `files/selinux/` holds MongoDB's policy sources (GPL-2.0-or-late
 - With authorization on, the role logs in as `mongodb8_cis_admin_user` for its Section 2/3 reads. The password is
   briefly visible in the server's process list while `mongosh` runs.
 - Only MongoDB 8.0 is supported; prelim stops on any other installed or requested version.
+- What each section and each rule's variables do: [`docs/sections.md`](docs/sections.md); how `mongod.conf` is read and
+  changed: [`docs/reading-config.md`](docs/reading-config.md).
 - Design decisions, platform facts and test evidence: [`docs/`](docs/).
 
 ## License

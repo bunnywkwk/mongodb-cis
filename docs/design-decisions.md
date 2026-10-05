@@ -149,6 +149,10 @@ The benchmark marks these as Enterprise features. This role targets Enterprise, 
 
 ## D13a. Revised 2026-10-02: use the collection's pymongo modules, with pymongo in a venv on each server
 
+> **Branch `mongodb8-cis-rebuild` only.** `main` keeps D13 (`mongodb_shell`, nothing installed on the server). On
+> `main`, 2.1, 2.2 and 3.1–3.5 read `admin.system.users` with CIS's own queries, so every user is seen; `mongodb_info`
+> misses users of databases without data (found 2026-10-05).
+
 - **Decision (user):**
   - Rules 2.1, 2.2, 3.1, 3.2 and 3.5 use `community.mongodb.mongodb_user` / `mongodb_info`, for more readable tasks. 2.1's user creation becomes one idempotent task (`state: present`, `update_password: on_create`).
   - The role prepares each server:
@@ -166,7 +170,7 @@ The benchmark marks these as Enterprise features. This role targets Enterprise, 
   - Every server needs PyPI (or an internal mirror) for the first run.
   - The role installs Python 3.12 + pip packages on servers it hardens, documented in the README.
   - pymongo must stay ≥ 4.9.
-- **Supersedes** D13's "no pymongo" choice. D13 stays as the record of the earlier reasoning.
+- **On the rebuild branch,** supersedes D13's "no pymongo" choice. On `main`, D13 stays in force.
 
 ## D14. What the CIS spreadsheet (S6) tells us about AUDIT steps
 
@@ -340,8 +344,8 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 - **Decision:**
   - AUDIT: rule 5.1 is compliant when `auditLog.destination` is set to anything. This is the S5 audit (*"confirm the auditLog.destination value is set"*), done on the parsed config (D14).
   - PATCH (only when missing): merge `auditLog` from site values, then restart (D7):
-    - `mongodb8_cis_audit_destination: syslog` (allowed: `syslog`, `console`, `file`).
-    - With `file`: `mongodb8_cis_audit_format` (`JSON`/`BSON`, default `JSON`) and `mongodb8_cis_audit_path` (empty = `auditLog.<format>` next to `systemLog.path`, D8).
+    - `mongodb8_cis_audit_log: {destination: syslog}`: the `auditLog:` block, written as-is (`syslog`, `console`, or `file` with `format` JSON/BSON and `path`).
+    - **Revised 2026-10-05 (user decision):** replaces three variables (`_audit_destination`, `_audit_format`, `_audit_path`) and the computed default path (`auditLog.<format>` next to `systemLog.path`). The variable now mirrors CIS's own remediation block, and the task's `vars:` is one line like 5.3/5.4. Cost: a `file` user writes the path. Tested on ansible-core 2.16.19 and 2.20.7 (syslog, file/BSON, file without path → assert, existing `auditLog` untouched, rerun `changed=0`).
     - An assert stops the rule with a clear message on any other value.
   - An existing `auditLog` is **never changed**, even if it differs from the variables.
 - **Why `syslog` as default:**
@@ -444,6 +448,33 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
   | E3 | Session 2026-10-04: `mongodb8_cis_db_users` list + `mongodb_user` task built, syntax-checked, then reverted by the user | the variable needed 4–5 nested fields per account: too complex for end users |
   | E4 | Lab VM (host `rhel8`), 2026-10-04: `systemctl show mongod -p User` → `User=mongod`; `getent passwd mongod` → `mongod:x:975:974:mongod:/var/lib/mongo:/bin/false`; `ps -o user -C mongod` → `mongod` | the RPM already meets 3.3 (CIS audit = process owner) |
   | E5 | MongoDB stores custom roles in `admin.system.roles`; a new install has none (**to confirm** in the rebuild test: 3.4 should report `0 user-defined role(s)`) | nothing for 3.4 to fix by default |
+
+## D29. Coverage: every rule is implemented; 7 stay report-only on purpose
+
+- **Decision:** all 23 recommendations have a task. 16 change the host (10 Automated PATCH rules + 6 Manual rules with
+  an opt-in site variable, D20). 7 only report: 1.1, 2.3, 3.2, 3.3, 3.4, 3.5, 4.5. User decision 2026-10-05.
+- **How a rule was weighed** (an option is added only if the answer to all four is "yes"):
+  1. **One concrete fix:** does CIS's remediation name a setting or command the role can apply as written?
+  2. **Simple input:** can the site express its decision as one simple value (a boolean, a string, a short list)?
+  3. **Safe if wrong:** if the value is wrong, is the damage limited and reversible (no data loss, no admin lockout)?
+  4. **Worth it:** does a fresh install fail the rule, or can it drift later?
+
+  | Rule | 1. Concrete fix | 2. Simple input | 3. Safe if wrong | 4. Worth it | Result |
+  |------|-----------------|-----------------|------------------|-------------|--------|
+  | 1.1 | upgrade binaries (CIS: backup, stop, replace, restart) | version + change window | ❌ an upgrade restarts the database and can't be rolled back by the role | yes | report only |
+  | 2.3 | `clusterAuthMode: x509` on every cluster member | certificates per member | ❌ rolling restart of a whole cluster | ❌ no cluster: the role targets a standalone `mongod` | report N/A |
+  | 3.2 | ❌ "assign the **appropriate** roles" | ❌ 4–5 nested fields per account (D28 E3) | ❌ apps lose roles; login restrictions wiped (D28 E2) | — | report only |
+  | 3.3 | nothing on a fresh install (`User=mongod`, D28 E4) | — | ❌ re-owning files: one missed file and mongod won't start | ❌ already passes | report only |
+  | 3.4 | ❌ privileges the site picks per role | ❌ role + resource + actions per entry | ❌ an app loses an action it needs | ❌ no custom roles by default | report only |
+  | 3.5 | ❌ "**review**" admin roles | ❌ which admins are legitimate | ❌ admins locked out | — | report only |
+  | 4.5 | ❌ a procedure: master key, KMIP, rotation | ❌ key server design | ❌ **data loss**: existing data can't be encrypted in place; lost key = unreadable data ([manual-remediation.md](manual-remediation.md) 4.5, E1–E5) | — | report only |
+
+- **Why:** for these seven, automating means either guessing a value only the site's people know, or building a
+  complex input that end users would get wrong, where a mistake costs an outage, a lockout or data. A clear report plus
+  a written hand fix ([manual-remediation.md](manual-remediation.md)) is safer and still CIS-correct: CIS marks 1.1,
+  3.x and 4.5 **Manual**, which only requires a person to review them.
+- **Revisit when:** a site provides a KMIP server (4.5 option B in manual-remediation.md), or the role adds replica
+  set/sharding support (2.3).
 
 ## Not adopted
 

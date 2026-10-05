@@ -11,23 +11,19 @@
     - rule_5.1
     - logging
   vars:
-    mongodb8_cis_5_1_path: >-
-      {{ mongodb8_cis_audit_path or ((discovered_mongod_conf['systemLog']['path'] | default(mongodb8_cis_default_log_path) | dirname)
-      ~ '/auditLog.' ~ (mongodb8_cis_audit_format | lower)) }}
     mongodb8_cis_5_1_settings:
-      auditLog: >-
-        {{ {'destination': mongodb8_cis_audit_destination}
-        | combine({'format': mongodb8_cis_audit_format, 'path': mongodb8_cis_5_1_path} if mongodb8_cis_audit_destination == 'file' else {}) }}
+      auditLog: "{{ mongodb8_cis_audit_log }}"
   block:
     - name: "5.1 | PATCH | Ensure that system activity is audited | Check the site values"
       ansible.builtin.assert:
         that:
-          - mongodb8_cis_audit_destination in ['syslog', 'console', 'file']
-          - mongodb8_cis_audit_destination != 'file' or mongodb8_cis_audit_format in ['JSON', 'BSON']
+          - mongodb8_cis_audit_log['destination'] | default('') in ['syslog', 'console', 'file']
+          - >-
+            mongodb8_cis_audit_log['destination'] != 'file'
+            or (mongodb8_cis_audit_log['format'] | default('') in ['JSON', 'BSON'] and mongodb8_cis_audit_log['path'] | default('') | length > 0)
         fail_msg: >-
-          5.1: mongodb8_cis_audit_destination must be syslog, console or file (found '{{ mongodb8_cis_audit_destination }}');
-          with file, mongodb8_cis_audit_format must be JSON or BSON (found '{{ mongodb8_cis_audit_format }}').
-        quiet: true
+          5.1: mongodb8_cis_audit_log.destination must be syslog, console or file; with file, also set format (JSON or BSON)
+          and path (found {{ mongodb8_cis_audit_log | to_json }}).
 
     - name: "5.1 | PATCH | Ensure that system activity is audited | Set auditLog"
       ansible.builtin.copy:
