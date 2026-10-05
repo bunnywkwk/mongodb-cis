@@ -39,10 +39,10 @@ ansible-playbook playbooks/site.yml --limit rhel9-mongo -e @profiles/c3-full-ben
 ansible-playbook playbooks/site.yml --limit rhel9-mongo -e @profiles/c3-full-benchmark.yml      # S5 rerun: changed=0
 ```
 
-Then SSH to the host and run the checks below. Set this once (asks the admin password each time):
+Then SSH to the host and run the checks below. Set this once **in the same SSH session** (`echo "$M"` must print it; mongosh asks the admin password each time):
 
 ```bash
-M='sudo mongosh --quiet --port 27100 --tls --tlsCAFile /etc/pki/mongodb/ca.pem --tlsCertificateKeyFile /etc/pki/mongodb/server.pem --tlsAllowInvalidHostnames -u frqadminDB --authenticationDatabase admin -p'
+M='sudo mongosh --quiet --port 27100 --tls --tlsCAFile /etc/pki/mongodb/ca.pem --tlsCertificateKeyFile /etc/pki/mongodb/server.pem --tlsAllowInvalidHostnames -u frqadminDB --authenticationDatabase admin'
 ```
 
 Screenshots: `docs/evidence-images/NN-rhel9-<rule>-<result>.png` (next free number: 04), listed in the last column.
