@@ -78,11 +78,25 @@
   ansible.builtin.set_fact:
     discovered_mongod_running_conf: "{{ discovered_mongod_conf }}"
 
+- name: "PRELIM | AUDIT | Check mongod.conf uses net.tls, not the deprecated net.ssl"
+  when: mongodb8_cis_section4
+  ansible.builtin.assert:
+    that:
+      - discovered_mongod_conf['net']['ssl'] is not defined
+    fail_msg: >-
+      {{ mongodb8_cis_conf_path }} has a net.ssl block (deprecated since MongoDB 4.2). Move it to net.tls by hand
+      before running Section 4: mongod refuses net.ssl and net.tls together.
+
 - name: "PRELIM | AUDIT | Check the database login values"
   when: mongodb8_cis_section2 or mongodb8_cis_section3
   ansible.builtin.assert:
     that:
-      - not mongodb8_cis_shell_auth or (mongodb8_cis_admin_user | length > 0 and mongodb8_cis_admin_password | lenght > 0)
+      - not mongodb8_cis_shell_auth or (mongodb8_cis_admin_user | length > 0 and mongodb8_cis_admin_password | length > 0)
+      - mongodb8_cis_admin_password is not search('[\\s\\x22\\x27\\x5c]')
+    fail_msg: >-
+      Sections 2 and 3 read the database. Authorization is on, so set mongodb8_cis_admin_user and
+      mongodb8_cis_admin_password (or turn off mongodb8_cis_section2/3). The password must not contain spaces,
+      quotes or backslashes (mongodb_shell passes it unquoted).
 
 - name: "PRELIM | AUDIT | Read mongod service properties"
   ansible.builtin.systemd_service:

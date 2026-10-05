@@ -1,0 +1,52 @@
+---
+- name: "2.1 | PATCH | Ensure Authentication is configured"
+  when:
+    - mongodb8_cis_rule_2_1
+    - mongodb8_cis_level_1
+    - discovered_mongod_conf['security']['authorization'] | default('disabled') != 'enabled'
+  tags:
+    - level1
+    - automated
+    - patch
+    - rule_2.1
+    - authentication
+  vars:
+    mongodb8_cis_2_1_settings:
+      security:
+        authorization: enabled
+  block:
+    - name: "2.1 | PATCH | Ensure Authentication is configured | Check the admin user values"
+      ansible.builtin.assert:
+        that:
+          - mongodb8_cis_admin_user | length > 0
+          - mongodb8_cis_admin_password | length > 0
+        fail_msg: >-
+          2.1: set mongodb8_cis_admin_user and mongodb8_cis_admin_password (keep the password in Ansible Vault).
+          The admin user is created before authorization is enabled.
+
+    # CIS remediation: create the user administrator first (role root on admin), then enable authorization.
+    - name: "2.1 | PATCH | Ensure Authentication is configured | Create the admin user"
+      community.mongodb.mongodb_user:
+        name: "{{ mongodb8_cis_admin_user }}"
+        password: "{{ mongodb8_cis_admin_password }}"
+        database: admin
+        roles:
+          - db: admin
+            role: root
+        update_password: on_create
+        state: present
+      no_log: true
+
+    - name: "2.1 | PATCH | Ensure Authentication is configured | Set security.authorization: enabled"
+      ansible.builtin.copy:
+        dest: "{{ mongodb8_cis_conf_path }}"
+        content: "{{ discovered_mongod_conf | combine(mongodb8_cis_2_1_settings, recursive=true) | to_nice_yaml(indent=2) }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      notify: Restart mongod
+
+    - name: "2.1 | PATCH | Ensure Authentication is configured | Update the parsed config"
+      ansible.builtin.set_fact:
+        discovered_mongod_conf: "{{ discovered_mongod_conf | combine(mongodb8_cis_2_1_settings, recursive=true) }}"

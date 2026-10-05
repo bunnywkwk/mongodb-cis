@@ -92,3 +92,19 @@ Context for an AI assistant (or person) continuing this work on another device. 
   RHEL 9 port/data labels not captured in `test-results.md`.
 - CLAUDE.md says the workstation is AlmaLinux 10, but it reports Fedora 44 (`selinux-policy-targeted-44.9-1.fc44`). Ask the user.
 - Today's lab VMs were reached on 192.168.122.x (libvirt), hosts `rhel8-pc`, `rhel9-pc`, `rhel10-pc`.
+- 2026-10-04: Section 3 stays report-only except 3.1: new `mongodb8_cis_revoke_admin_roles: []` (D20) + PATCH task in
+  the build guide (`mongodb_shell` `revokeRolesFromUser`; rendering tested with fake data, **not yet on a real mongod**).
+  3.2 declared-accounts option was built and reverted (too complicated); 3.2 stays report-only. `check_mode: false` on `mongodb_info` reads is redundant (module supports check
+  mode); offered to drop it from the guide, not decided.
+- 2026-10-05: 3.3 and 3.4 stay report-only ("Not adopted" rows); new `docs/manual-remediation.md` (Section 3 hand fixes),
+  to be linked from the README. 3.1 revoke list kept.
+- 2026-10-05 (end): batches 7–9 typed by the user; the assistant made every typed file match the tested guide (user's
+  typos and bugs: levl_2, .key(), ['user'], transform_output, attributes=, monogdb8/mainPID, 3.4 indent, 2.2 assert
+  inside vars, main.yml imports, pymongo venv path, handler daemon_reload, prelim `lenght`). `quiet: true` left out
+  (user's choice); SELinux import left out (batch 10 not typed). yamllint + ansible-lint (production) clean,
+  `--syntax-check` on 2.16 OK. **Not yet run on a VM.** 4.5 stays report-only: evidence + future options in
+  manual-remediation.md. `docs/cis-requirements.md` restored from main and updated (compliance check section, full-
+  benchmark group_vars example). Next: user pushes this branch, points mongodb8-cis-test's requirements.yml at it,
+  runs the acceptance test (cis-requirements.md "How to check").
+- 2026-10-05: batch 10 (SELinux extra) written by the assistant on request: `tasks/selinux.yml` + import in
+  `tasks/main.yml` (now identical to the guide's appendix). All 10 batches done; lint + syntax-check clean; VM test next.

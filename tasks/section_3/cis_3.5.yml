@@ -1,0 +1,39 @@
+---
+- name: "3.5 | AUDIT | Review Superuser/Admin Roles"
+  when:
+    - mongodb8_cis_rule_3_5
+    - mongodb8_cis_level_2
+  tags:
+    - level2
+    - manual
+    - audit
+    - rule_3.5
+    - authorization
+  vars:
+    mongodb8_cis_3_5_roles:
+      - root
+      - dbOwner
+      - userAdmin
+      - userAdminAnyDatabase
+      - readWriteAnyDatabase
+      - dbAdminAnyDatabase
+      - clusterAdmin
+      - hostManager
+    mongodb8_cis_3_5_users: "{{ discovered_3_5_info['users'] | dict2items | map(attribute='value') | map('dict2items') | flatten(levels=1) }}"
+  block:
+    - name: "3.5 | AUDIT | Review Superuser/Admin Roles | Read database users"
+      community.mongodb.mongodb_info:
+        filter: users
+      register: discovered_3_5_info
+      check_mode: false
+
+    - name: "3.5 | AUDIT | Review Superuser/Admin Roles | Report each user with a superuser or admin role"
+      when: item['value']['roles'] | from_yaml | map(attribute='role') | intersect(mongodb8_cis_3_5_roles) | length > 0
+      ansible.builtin.debug:
+        msg: >-
+          3.5 REVIEW: {{ item['value']['_id'] }} holds
+          {{ item['value']['roles'] | from_yaml | map(attribute='role') | intersect(mongodb8_cis_3_5_roles) | join(', ') }}.
+          Check this is needed.
+      loop: "{{ mongodb8_cis_3_5_users }}"
+      loop_control:
+        label: "{{ item['value']['_id'] }}"

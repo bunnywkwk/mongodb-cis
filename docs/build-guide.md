@@ -895,6 +895,21 @@ Add to `prelim.yml`, after "Keep the config mongod is running with":
       loop_control:
         label: "{{ item['value']['_id'] }}"
 
+    # CIS remediation: drop these roles. Only for the accounts the site lists (site decision); the account itself stays.
+    - name: "3.1 | PATCH | Ensure least privilege for database accounts | Revoke the roles from the listed accounts"
+      when:
+        - item['value']['_id'] in mongodb8_cis_revoke_admin_roles
+        - item['value']['roles'] | from_yaml | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | length > 0
+      community.mongodb.mongodb_shell:
+        eval: >-
+          db.getSiblingDB({{ item['value']['_id'].split('.')[0] | to_json }}).revokeRolesFromUser({{ item['key'] | to_json }},
+          {{ item['value']['roles'] | from_yaml | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | to_json }})
+      loop: "{{ mongodb8_cis_3_1_users }}"
+      loop_control:
+        label: "{{ item['value']['_id'] }}"
+      tags:
+        - patch
+
     - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Report PASS when there are none"
       when: >-
         mongodb8_cis_3_1_users | map(attribute='value.roles') | map('from_yaml') | flatten

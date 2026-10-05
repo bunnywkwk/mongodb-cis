@@ -246,16 +246,22 @@ RHEL 8, 9, 10 (S6 certification columns). **Not yet run on this branch:** batche
 
   | Rule | Site variable | Default | When set |
   |------|---------------|---------|----------|
+  | 3.1 | `mongodb8_cis_revoke_admin_roles` | `[]` | revokes `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin from the **listed** accounts only (`<db>.<user>`); the account and its other roles stay |
   | 5.2 | `mongodb8_cis_audit_filter` | `""` | writes `auditLog.filter` (only when auditing is on) |
   | 6.3 | `mongodb8_cis_javascript_needed` | `true` | `false` → `security.javascriptEnabled: false` |
   | 6.2 | `mongodb8_cis_fix_resource_limits` + `mongodb8_cis_resource_limits` (CIS values) | `false` | systemd drop-in with the limits, restart (only on drift) |
   | 7.1 | `mongodb8_cis_fix_key_file_permissions` | `false` | existing keyFile / TLS key / CA → `0600`, owner mongod |
   | 7.2 | `mongodb8_cis_fix_db_path_permissions` | `false` | dbPath → `0770`, owner mongod |
 
-  Report-only: 1.1 (never auto-upgrade), 3.x (users and roles are a people decision), 4.5 (key management design).
+  Report-only: 1.1 (never auto-upgrade), 3.2–3.5 (users and roles are a people decision), 4.5 (key management design).
 - **Why:** the value is the site's decision, not the role's guess (CLAUDE.md principle 5). A Manual rule that
   only ever reports leaves the site to fix by hand what the role could apply safely once told.
-- **Changed in the rebuild** (user direction 2026-10-02): 5.2 and 7.1 gained site variables; 6.2 on 2026-10-03.
+- **Changed in the rebuild** (user direction 2026-10-02): 5.2 and 7.1 gained site variables; 6.2 on 2026-10-03; 3.1 on 2026-10-04.
+- **3.1 details:** the site names accounts after reading the report, so the role never decides who loses a role. It
+  revokes only the three roles CIS names, scoped to admin (`revokeRolesFromUser` via `mongodb_shell`), not the account
+  (CIS: *"drop them"* is read as the roles). `mongodb_user` was not used: it rewrites the whole role list and clears the
+  user's `authenticationRestrictions` (`updateUser` with `[]`, `mongodb_user.py` `user_add`). Runs only when the listed
+  account still holds a flagged role, so a rerun is `changed=0`.
 - **6.2 details:** the expected values are a variable (default = CIS 6.2 Remediation: f/t/v/m unlimited, n/u 64000)
   because CIS says *"Every deployment may have unique requirements"*. The fix is a drop-in
   (`/etc/systemd/system/mongod.service.d/mongodb8_cis-limits.conf`), never an edit of the RPM's unit, and runs only when
@@ -318,6 +324,37 @@ RHEL 8, 9, 10 (S6 certification columns). **Not yet run on this branch:** batche
 - **Decision:** `tasks/main.yml` → `section_<N>/main.yml` (section switch) → `cis_<N>.<M>.yml` (one per rule).
 - **Why:** Lockdown layout (L1, L2); one rule = one small file to review.
 
+## D28. Section 3 (Authorization): report only, except an opt-in revoke list for 3.1
+
+- **Decision:** 3.2–3.5 report only; 3.1 reports and has one opt-in site variable (`mongodb8_cis_revoke_admin_roles: []`).
+  Hand fixes: [manual-remediation.md](manual-remediation.md). User decision 2026-10-04/05.
+- **How each rule was weighed** (same four questions for every rule):
+  1. Does CIS give **one concrete fix** the role can apply? (D20)
+  2. What does a **wrong** value break?
+  3. What would the site have to **write** in `group_vars`?
+  4. What does a **fresh install** already look like?
+
+  | Rule | 1. Concrete fix in CIS? | 2. Wrong value breaks | 3. Site would write | 4. Fresh install | Result |
+  |------|-------------------------|-----------------------|---------------------|------------------|--------|
+  | 3.1 | **Yes**: names 3 roles in admin, *"then drop them"* | one listed account loses admin roles | a name: `admin.badadmin` | no users → PASS | opt-in list |
+  | 3.2 | No: *"Establish roles … assign the appropriate users"*; "appropriate" is the site's call | apps lose roles; IP login limits silently wiped (E2) | user + db + password (Vault) + roles (+ restrictions) per account | no users | report only (built, then reverted: E3) |
+  | 3.3 | Nothing to fix by default; FAIL fix is a repair job | mongod does not start if one root-owned file is missed | nothing useful | `User=mongod`, not root → PASS (E4) | report only |
+  | 3.4 | No: `revokePrivilegesFromRole` with privileges the site picks | app can no longer run an action it needs | role + db + resource + actions per entry | 0 custom roles (E5) | report only |
+  | 3.5 | No: *"Review"* superuser/admin roles | admins locked out of their own work | which admin accounts are legitimate | no users | report only |
+
+- **Why:** automating 3.2–3.5 would turn the hardening role into an account-management tool whose input only the site's
+  people can write, and whose mistakes lock out admins or break apps. The reports already give the reviewer every fact
+  the CIS audit asks for. 3.1 is the exception because CIS names the exact roles and the site only names accounts.
+- **Evidence:**
+
+  | # | Source | Shows |
+  |---|--------|-------|
+  | E1 | CIS MongoDB 8 v2.0.0, 3.1–3.5 Remediation sections | the wording quoted above; all five are **Manual** |
+  | E2 | `community.mongodb` 1.8.0 `plugins/modules/mongodb_user.py` `user_add`: `if exists or authentication_restrictions: user_dict["authenticationRestrictions"] = authentication_restrictions`, default `[]` | updating an existing user with `mongodb_user` clears its `authenticationRestrictions` unless the site repeats them |
+  | E3 | Session 2026-10-04: `mongodb8_cis_db_users` list + `mongodb_user` task built, syntax-checked, then reverted by the user | the variable needed 4–5 nested fields per account: too complex for end users |
+  | E4 | Lab VM (host `rhel8`), 2026-10-04: `systemctl show mongod -p User` → `User=mongod`; `getent passwd mongod` → `mongod:x:975:974:mongod:/var/lib/mongo:/bin/false`; `ps -o user -C mongod` → `mongod` | the RPM already meets 3.3 (CIS audit = process owner) |
+  | E5 | MongoDB stores custom roles in `admin.system.roles`; a new install has none (**to confirm** in the rebuild test: 3.4 should report `0 user-defined role(s)`) | nothing for 3.4 to fix by default |
+
 ## Not adopted
 
 | Not adopted | Why |
@@ -326,3 +363,8 @@ RHEL 8, 9, 10 (S6 certification columns). **Not yet run on this branch:** batche
 | Per-OS vars files | No per-OS difference except D1/D13a values |
 | Global `disruption_high` | D6 |
 | `check_mode` trick for Manual rules (one `file` task as report) | Rerun shows `changed` every time, no readable verdict ([simplicity-review.md](simplicity-review.md) 4.1) |
+| Section 3 fixes for 3.2–3.5 (declared users/roles via `mongodb_user`/`mongodb_role`, drop lists for 3.4/3.5) | User decision 2026-10-04: report only. A hardened database may hold custom admins on purpose; removing accounts or roles can lock out admins or break apps. **Revised 2026-10-04:** 3.1 got an opt-in revoke list (D20). A 3.2 declared-accounts list (`mongodb8_cis_db_users`, `mongodb_user`) was built the same day and reverted by the user as too complicated |
+| 3.3 fix (switch a root-run mongod to a service account) | The RPM already creates `mongod` and runs the service as it, so 3.3 passes by default (CIS audit = process owner). The FAIL case means re-owning every file root created, often in unknown paths; one miss and mongod does not start. Rare and needs a person. Manual steps: [manual-remediation.md](manual-remediation.md) |
+| 3.4 fix (`revokePrivilegesFromRole` from a site list) | User decision 2026-10-05: report only. The site would have to write role + db + resource + actions per entry (too much syntax), and only the app team knows which privilege is unneeded; a wrong entry breaks the app. A fresh install has no custom roles. Manual steps: [manual-remediation.md](manual-remediation.md) |
+| 2.3 fix (set `clusterAuthMode` + `keyFile`/x509) | Writing the setting is easy, but it only works across a sharded cluster: one keyFile (or x509 member certs) on every member, `transitionToAuth`, rolling restart. The role targets a standalone mongod (Scope, top of this file), where 2.3 is not applicable; the rule reports N/A |
+| 4.5 fix (enable encryption at rest) | User decision 2026-10-05: report only for now. MongoDB *"cannot encrypt existing data"* (dump/empty dbPath/restore), the keyfile method *"does not meet most regulatory key management guidelines"*, KMIP needs external infrastructure, and a lost key makes all data unreadable. Evidence and future options (fresh-install keyfile, KMIP): [manual-remediation.md](manual-remediation.md) 4.5 |

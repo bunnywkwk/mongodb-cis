@@ -1,0 +1,21 @@
+---
+# 4.3 runs first: mongod refuses net.tls options (4.1, 4.2, 4.4) unless TLS is enabled (D25).
+- name: "SECTION | 4.3 | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption)"
+  ansible.builtin.import_tasks:
+    file: cis_4.3.yml
+
+- name: "SECTION | 4.1 | Ensure legacy TLS protocols are disabled"
+  ansible.builtin.import_tasks:
+    file: cis_4.1.yml
+
+- name: "SECTION | 4.2 | Ensure Weak Protocols are Disabled"
+  ansible.builtin.import_tasks:
+    file: cis_4.2.yml
+
+- name: "SECTION | 4.4 | Ensure Federal Information Processing Standard (FIPS) is enabled"
+  ansible.builtin.import_tasks:
+    file: cis_4.4.yml
+
+- name: "SECTION | 4.5 | Ensure Encryption of Data at Rest"
+  ansible.builtin.import_tasks:
+    file: cis_4.5.yml

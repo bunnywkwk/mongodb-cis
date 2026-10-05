@@ -44,6 +44,8 @@ mongodb8_cis_rule_2_3: false            # sharded clusters only; this role targe
 # Section 3 - Authorization
 # 3.1 (L1, Manual) Ensure least privilege for database accounts
 mongodb8_cis_rule_3_1: true
+# WARNING: the listed accounts lose dbOwner/userAdmin/userAdminAnyDatabase in admin; check the 3.1 report first.
+mongodb8_cis_revoke_admin_roles: []     # ↳ accounts as the 3.1 report names them (<database>.<user>), e.g. ["admin.badadmin"]
 # 3.2 (L1, Manual) Ensure that role-based access control is enabled and configured appropriately
 mongodb8_cis_rule_3_2: true
 # 3.3 (L1, Manual) Ensure that MongoDB is run using a non-privileged, dedicated service account
@@ -90,7 +92,7 @@ mongodb8_cis_rule_5_4: true
 # 6.1 (L1, Automated) Ensure that MongoDB uses a non-default port
 # WARNING: every client and connection string must change to the new port.
 mongodb8_cis_rule_6_1: false
-mongodb8_cis_port: ""                   # ↳ 1024-65535, not 27017, e.g. 47017 (CIS: organisation defined)
+mongodb8_cis_port: ""                   # ↳ 1024-65535, not 27017, e.g. 27117 (CIS: organisation defined; avoid 32768-60999, the ephemeral range)
 # 6.2 (L2, Manual) Ensure that operating system resource limits are set for MongoDB
 mongodb8_cis_rule_6_2: true
 mongodb8_cis_fix_resource_limits: false  # ↳ true = write the limits below as a systemd drop-in for mongod (+ restart) when they differ

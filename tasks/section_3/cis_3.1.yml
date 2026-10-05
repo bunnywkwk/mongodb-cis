@@ -1,2 +1,58 @@
 ---
+- name: "3.1 | AUDIT | Ensure least privilege for database accounts"
+  when:
+    - mongodb8_cis_rule_3_1
+    - mongodb8_cis_level_1
+  tags:
+    - level1
+    - manual
+    - audit
+    - rule_3.1
+    - authorization
+  vars:
+    mongodb8_cis_3_1_roles: [dbOwner, userAdmin, userAdminAnyDatabase]
+    # mongodb_info: users = {database: {user name: details}}; each user's roles come as a text string (str()).
+    mongodb8_cis_3_1_users: "{{ discovered_3_1_info['users'] | dict2items | map(attribute='value') | map('dict2items') | flatten(levels=1) }}"
+  block:
+    - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Read database users"
+      community.mongodb.mongodb_info:
+        filter: users
+      register: discovered_3_1_info
+      check_mode: false
 
+    - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Report each account with dbOwner, userAdmin, userAdminAnyDatabase in admin"
+      when: >-
+        item['value']['roles'] | from_yaml | selectattr('db', 'equalto', 'admin') | map(attribute='role')
+        | intersect(mongodb8_cis_3_1_roles) | length > 0
+      ansible.builtin.debug:
+        msg: >-
+          3.1 REVIEW: {{ item['value']['_id'] }} holds
+          {{ item['value']['roles'] | from_yaml | selectattr('db', 'equalto', 'admin') | map(attribute='role') | intersect(mongodb8_cis_3_1_roles) | join(', ') }}
+          in admin. CIS: drop these roles. (Users of databases that hold no data yet are not listed by mongodb_info.)
+      loop: "{{ mongodb8_cis_3_1_users }}"
+      loop_control:
+        label: "{{ item['value']['_id'] }}"
+
+    # CIS remediation: drop these roles. Only for the accounts the site lists (site decision); the account itself stays.
+    - name: "3.1 | PATCH | Ensure least privilege for database accounts | Revoke the roles from the listed accounts"
+      when:
+        - item['value']['_id'] in mongodb8_cis_revoke_admin_roles
+        - item['value']['roles'] | from_yaml | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | length > 0
+      community.mongodb.mongodb_shell:
+        eval: >-
+          db.getSiblingDB({{ item['value']['_id'].split('.')[0] | to_json }}).revokeRolesFromUser({{ item['key'] | to_json }},
+          {{ item['value']['roles'] | from_yaml | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | to_json }})
+      loop: "{{ mongodb8_cis_3_1_users }}"
+      loop_control:
+        label: "{{ item['value']['_id'] }}"
+      tags:
+        - patch
+
+    - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Report PASS when there are none"
+      when: >-
+        mongodb8_cis_3_1_users | map(attribute='value.roles') | map('from_yaml') | flatten
+        | selectattr('db', 'equalto', 'admin') | map(attribute='role') | intersect(mongodb8_cis_3_1_roles) | length == 0
+      ansible.builtin.debug:
+        msg: >-
+          3.1 PASS: no account holds dbOwner, userAdmin or userAdminAnyDatabase in admin.
+          (Users of databases that hold no data yet are not listed by mongodb_info.)

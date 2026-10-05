@@ -1,0 +1,12 @@
+---
+- name: "SECTION | 2.1 | Ensure Authentication is configured"
+  ansible.builtin.import_tasks:
+    file: cis_2.1.yml
+
+- name: "SECTION | 2.2 | Ensure that MongoDB does not bypass authentication via the localhost exception"
+  ansible.builtin.import_tasks:
+    file: cis_2.2.yml
+
+- name: "SECTION | 2.3 | Ensure authentication is enabled in the sharded cluster"
+  ansible.builtin.import_tasks:
+    file: cis_2.3.yml

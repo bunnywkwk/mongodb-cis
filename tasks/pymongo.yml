@@ -1,13 +1,12 @@
 ---
-# Not cis rule: prepare the database module used by section 2 and 3
-
-- name: "PREPARE  | PATCH | Install python3.12 for pymongo"
+# Not a CIS rule: prepares the database modules used by sections 2 and 3 (D13a).
+- name: "PREPARE | PATCH | Install Python 3.12 for pymongo"
   ansible.builtin.dnf:
     name: "{{ mongodb8_cis_python_packages[ansible_facts['distribution_major_version']] }}"
     state: present
 
-- name: "PREPARE | PATCH | Install pymongo in its own virtualvenv"
+- name: "PREPARE | PATCH | Install pymongo in its own virtualenv"
   ansible.builtin.pip:
     name: "{{ mongodb8_cis_pymongo_spec }}"
-    virtualenv: "{{ mongodb8_cis_pymongo_spec }}"
+    virtualenv: "{{ mongodb8_cis_pymongo_venv }}"
     virtualenv_command: "{{ mongodb8_cis_python_bin }} -m venv"

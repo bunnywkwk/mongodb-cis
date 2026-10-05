@@ -4,6 +4,7 @@
   ansible.builtin.systemd_service:
     name: "{{ mongodb8_cis_service }}"
     state: restarted
+    daemon_reload: true   # picks up systemd drop-ins written by the role (6.2)
 
 - name: Wait for mongod to accept connections
   listen: Restart mongod
