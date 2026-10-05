@@ -46,3 +46,7 @@ mongod_port_t                  tcp      27017-27019, 28017-28019
 - The `aeolus-conductor`/`dbomatic` entries in the RHEL 8/9 list are leftovers of an unrelated project in Red Hat's
   `mongodb` module.
 - Confirms D11 and D17 (previously recorded from the `main` branch tests).
+
+## Compliance test (full benchmark)
+
+Per-host proof against every CIS Audit procedure: [compliance-test.md](compliance-test.md) (RHEL 9 first; screenshots 04–27).
