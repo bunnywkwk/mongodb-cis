@@ -10,18 +10,46 @@
     - rule_6.2
     - limits
   vars:
-    # CIS ulimit letters -> systemd: f=FSIZE, t=CPU, v=AS, n=NOFILE, m=RSS, u=NPROC
-    mongodb8_cis_6_2_limits:
-      LimitFSIZE: infinity
-      LimitCPU: infinity
-      LimitAS: infinity
-      LimitNOFILE: "64000"
-      LimitRSS: infinity
-      LimitNPROC: "64000"
-  ansible.builtin.debug:
-    msg: >-
-      6.2 {{ 'PASS' if discovered_mongod_service['status'][item.key] | default('') == item.value else 'REVIEW' }}:
-      {{ item.key }} = {{ discovered_mongod_service['status'][item.key] | default('unknown') }} (CIS: {{ item.value }}).
-  loop: "{{ mongodb8_cis_6_2_limits | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
+    # true when what systemd applies to mongod now (prelim) differs from mongodb8_cis_resource_limits.
+    mongodb8_cis_6_2_drift: >-
+      {{ mongodb8_cis_resource_limits.keys() | map('extract', discovered_mongod_service['status']) | list
+         != mongodb8_cis_resource_limits.values() | map('string') | list }}
+  block:
+    - name: "6.2 | AUDIT | Ensure that operating system resource limits are set for MongoDB | Report each limit"
+      ansible.builtin.debug:
+        msg: >-
+          6.2 {{ 'PASS' if discovered_mongod_service['status'][item.key] | default('') == item.value | string else 'REVIEW' }}:
+          {{ item.key }} = {{ discovered_mongod_service['status'][item.key] | default('unknown') }} (expected {{ item.value }}).
+      loop: "{{ mongodb8_cis_resource_limits | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    # CIS remediation: set the limits, then restart mongod. Done as a systemd drop-in; the RPM's unit file is not edited.
+    - name: "6.2 | PATCH | Ensure that operating system resource limits are set for MongoDB | Set the limits (site decision)"
+      when:
+        - mongodb8_cis_fix_resource_limits
+        - mongodb8_cis_6_2_drift
+      tags:
+        - patch
+      block:
+        - name: "6.2 | PATCH | Ensure that operating system resource limits are set for MongoDB | Create the drop-in directory"
+          ansible.builtin.file:
+            path: "{{ mongodb8_cis_limits_dropin | dirname }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: "6.2 | PATCH | Ensure that operating system resource limits are set for MongoDB | Write the limits drop-in"
+          ansible.builtin.copy:
+            dest: "{{ mongodb8_cis_limits_dropin }}"
+            content: |
+              # Managed by mongodb8_cis (CIS 6.2)
+              [Service]
+              {% for name, value in mongodb8_cis_resource_limits.items() %}
+              {{ name }}={{ value }}
+              {% endfor %}
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Restart mongod

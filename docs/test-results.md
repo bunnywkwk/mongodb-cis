@@ -60,3 +60,8 @@ Act as a DBA who must harden MongoDB to CIS, using only the README + `defaults/m
 2. Run `--check --diff` → review → real run → second run `changed=0`, on RHEL 8, 9, 10.
 3. Walk the CIS grid (D16): default install / non-hardened / hardened. Compare each rule's result with the benchmark's Audit Procedure.
 4. Record gaps in the README or role and screenshots here.
+
+## Compliance test (full benchmark, 2026-10-05)
+
+Per-host proof against every CIS Audit procedure: [compliance-test.md](compliance-test.md). Run it on `main` after
+the rebuild branch (see [session-handoff.md](session-handoff.md)).

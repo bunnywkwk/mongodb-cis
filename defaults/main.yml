@@ -52,6 +52,10 @@ mongodb8_cis_rule_2_3: false
 # Section 3 - Authorization
 # 3.1 (L1, Manual) Ensure least privilege for database accounts
 mongodb8_cis_rule_3_1: true
+# Site decision (D20): accounts to revoke dbOwner/userAdmin/userAdminAnyDatabase in admin from, written as the 3.1
+# report names them (<database>.<user>), e.g. ["admin.badadmin"]. Default [] = report only. The account and its other
+# roles stay. WARNING: read the 3.1 report first; a listed admin loses those roles.
+mongodb8_cis_revoke_admin_roles: []
 # 3.2 (L1, Manual) Ensure that role-based access control is enabled and configured appropriately
 mongodb8_cis_rule_3_2: true
 # 3.3 (L1, Manual) Ensure that MongoDB is run using a non-privileged, dedicated service account
@@ -94,6 +98,11 @@ mongodb8_cis_audit_format: JSON
 mongodb8_cis_audit_path: ""
 # 5.2 (L2, Manual) Ensure that audit filters are configured properly
 mongodb8_cis_rule_5_2: true
+# Site decision (D20): the audit filter your organisation requires, written to auditLog.filter (only when auditing is
+# on, 5.1). Default "" = report only; no filter means every auditable event is recorded.
+# e.g. '{ atype: { $in: [ "authenticate", "createUser", "dropUser" ] } }'
+# WARNING: a filter records less than the default; agree it with the security team.
+mongodb8_cis_audit_filter: ""
 # 5.3 (L2, Automated) Ensure that logging captures as much information as possible
 mongodb8_cis_rule_5_3: true
 # 5.4 (L2, Automated) Ensure that new entries are appended to the end of the log file
@@ -108,6 +117,17 @@ mongodb8_cis_rule_6_1: false
 mongodb8_cis_port: ""
 # 6.2 (L2, Manual) Ensure that operating system resource limits are set for MongoDB
 mongodb8_cis_rule_6_2: true
+# Site decision (D20): true = write mongodb8_cis_resource_limits as a systemd drop-in for mongod (+ restart) when the
+# limits systemd applies differ. Default false = report only. The RPM's unit file is never edited.
+mongodb8_cis_fix_resource_limits: false
+# Expected limits (CIS 6.2 remediation values; CIS: "Every deployment may have unique requirements").
+mongodb8_cis_resource_limits:
+  LimitFSIZE: infinity   # f  file size
+  LimitCPU: infinity     # t  cpu time
+  LimitAS: infinity      # v  virtual memory
+  LimitNOFILE: 64000     # n  open files
+  LimitRSS: infinity     # m  memory size
+  LimitNPROC: 64000      # u  processes/threads
 # 6.3 (L2, Manual) Ensure that server-side scripting is disabled if not needed
 mongodb8_cis_rule_6_3: true
 # Site decision (D20): false = your apps do NOT use server-side JavaScript ($where, mapReduce, $function, $accumulator)
@@ -118,6 +138,9 @@ mongodb8_cis_javascript_needed: true
 # Section 7 - File Permissions
 # 7.1 (L1, Manual) Ensure appropriate key file permissions are set
 mongodb8_cis_rule_7_1: true
+# Site decision (D20): true = set the existing keyFile / TLS key / CA files to 0600, owner and group = mongod user
+# (CIS: chmod 600). Default false = report only. Missing files are never created.
+mongodb8_cis_fix_key_file_permissions: false
 # 7.2 (L1, Manual) Ensure appropriate database file permissions are set.
 mongodb8_cis_rule_7_2: true
 # Site decision (D20): true = also FIX the dbPath directory to 0770, owner/group = mongod user.

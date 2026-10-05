@@ -169,3 +169,25 @@ sudo systemctl start mongod && sudo systemctl status mongod --no-pager | head -5
 
 **Prevent:** when replacing an SELinux policy module, check for files the old module labelled with types the new one
 does not define (`seinfo -t <type>` on both policies).
+
+## T-M8: 4.3 stops with "PEM files that exist on the host" (2026-10-05, compliance test on RHEL 9)
+
+```
+TASK [mongodb8_cis : 4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Check the PEM files] ***
+fatal: [rhel9-mongo]: FAILED! => {
+    "assertion": "discovered_4_3_files['results'] | selectattr('stat.exists') | list | length == 2",
+    "changed": false,
+    "evaluated_to": false,
+    "msg": "4.3: set mongodb8_cis_tls_certificate_key_file and mongodb8_cis_tls_ca_file to PEM files that exist on the host (found '/etc/pki/mongodb/server.pem', '/etc/pki/mongodb/ca.pem')."
+}
+rhel9-mongo                : ok=42   changed=5    unreachable=0    failed=1    skipped=5
+```
+
+- **Cause:** the full-benchmark profile (C3) ran before `playbooks/prep-tls.yml`, so the certificate and CA were not on
+  the host. The guard worked as designed: it stopped **before** writing `requireTLS`, which would have stopped mongod.
+- **Side effect:** the play stopped, so the `Restart mongod` handler did not run. 2.1/2.2 had already written
+  `authorization: enabled` and `enableLocalhostAuthBypass: false` to `/etc/mongod.conf`; mongod kept running with the old
+  settings until the next restart. The next run's 4.3 change triggers that restart.
+- **Fix:** `ansible-playbook playbooks/prep-tls.yml --limit rhel9-mongo`, then rerun the C3 profile.
+- **Prevent:** follow the order in [compliance-test.md](compliance-test.md) (S3 before S4). Add `--force-handlers` to
+  runs that change the config, so a later failure still restarts mongod with what was already written.

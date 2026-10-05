@@ -10,9 +10,57 @@ How to read a row:
 - **Role:**
   - **PATCH** fixes it when it's wrong.
   - **REPORT** only prints PASS / FAIL / REVIEW (Manual rules, or things the role must not decide).
-  - **DECISION** reports, and fixes only if the site sets a decision variable.
+  - **DECISION** reports, and fixes only if the site sets a decision variable (3.1, 5.2, 6.2, 6.3, 7.1, 7.2; D20).
   - "off" means the rule's toggle defaults to `false` (risky).
 - **Verify:** run on the VM after the role, to confirm the result yourself (not trusting the role's own output).
+
+## How to check that a hardened database is compliant
+
+Three levels, from quick to independent. Use all three for the acceptance test.
+
+| Level | How | Proves |
+|-------|-----|--------|
+| 1. Role report | Run the role, then run it **again**: the second run must show `changed=0`. Read every `PASS` / `FAIL` / `REVIEW` / `NOT APPLICABLE` line (`grep -E '[0-9]\.[0-9] (PASS\|FAIL\|REVIEW\|NOT APPLICABLE)'` on the output) | the role thinks the host is compliant, and it is stable |
+| 2. CIS audit by hand | On the server, run the **Verify** command of every row below (taken from each rule's *Audit* section in the PDF) and tick the PDF's *Appendix: Summary Table* "Set Correctly Yes/No" | the real state matches CIS, without trusting the role |
+| 3. Independent scan (optional) | CIS-CAT Pro Assessor (CIS SecureSuite members) or Tenable/Nessus with the CIS MongoDB 8 audit file | a score from a tool that didn't write the config |
+
+**What "compliant" means here:**
+- Every **Automated** rule (2.1, 2.2, 4.1–4.4, 5.1, 5.3, 5.4, 6.1) shows its pass value. 2.3 is **not applicable** on a standalone mongod.
+- Every **Manual** rule has been reviewed by a person: either PASS, or fixed (site variable or
+  [manual-remediation.md](manual-remediation.md)), or recorded as an accepted exception (who, why, approved by).
+- Level 1 = the 13 L1 rules. Level 2 = all 23 rules (Level 2 includes Level 1).
+
+**Acceptance test with `mongodb8-cis-test`** (fresh VM, then once per RHEL version):
+
+1. Defaults only (Level 1, risky rules off): run, rerun (`changed=0`), save the report. Expected: FAIL/REVIEW on the
+   risky rules that are off, that is what "safe by default" looks like.
+2. Full benchmark: `group_vars` with `mongodb8_cis_level_2: true`, the risky rules on and their site values
+   (admin user/password from Vault, TLS PEM + CA, port), plus the site decisions you want. Run, rerun (`changed=0`).
+3. Run every **Verify** command below on the VM; record results and screenshots in [test-results.md](test-results.md).
+4. Fix or accept the remaining Manual REVIEW items by hand.
+
+```yaml
+# group_vars/mongodb.yml: full-benchmark example (values are examples)
+mongodb8_cis_level_2: true
+mongodb8_cis_rule_2_1: true
+mongodb8_cis_rule_2_2: true
+mongodb8_cis_admin_user: dbadmin
+mongodb8_cis_admin_password: "{{ vault_mongodb_admin_password }}"
+mongodb8_cis_rule_4_3: true
+mongodb8_cis_rule_4_4: true
+mongodb8_cis_tls_certificate_key_file: /etc/pki/mongodb/server.pem
+mongodb8_cis_tls_ca_file: /etc/pki/mongodb/ca.pem
+mongodb8_cis_rule_6_1: true
+mongodb8_cis_port: 27117
+mongodb8_cis_fix_resource_limits: true
+mongodb8_cis_javascript_needed: false          # only if your apps don't use server-side JS
+mongodb8_cis_fix_key_file_permissions: true
+mongodb8_cis_fix_db_path_permissions: true
+```
+
+After step 2, connect with TLS and the new port, e.g.
+`mongosh --tls --tlsCAFile /etc/pki/mongodb/ca.pem --tlsCertificateKeyFile /etc/pki/mongodb/server.pem --tlsAllowInvalidHostnames --port 27117 -u dbadmin --authenticationDatabase admin`
+(written as `mongosh …` below).
 
 ## How each row was derived from the PDF
 
@@ -56,7 +104,7 @@ without risk; a site that fills in its values gets the full benchmark.
 
 | ID | Lvl / type | CIS checks → passes when | Role | Default | Verify on the VM |
 |----|-----------|--------------------------|------|---------|------------------|
-| 1.1 | L1 Manual | `mongod --version` / `db.version()` → the version is the latest patch the organisation can run (check mongodb.com/alerts) | REPORT: installed version + where to compare. Never upgrades | on | `mongod --version` |
+| 1.1 | L1 Manual | `mongod --version` / `db.version()` → the version is the latest patch the organisation can run (check mongodb.com/alerts) | REPORT: installed version + where to compare. Never upgrades | on | `mongod --version`; `dnf list --showduplicates mongodb-enterprise-server \| tail -1` (latest 8.0.x in the repo) |
 
 ## Section 2: Authentication
 
@@ -70,7 +118,7 @@ without risk; a site that fills in its values gets the full benchmark.
 
 | ID | Lvl / type | CIS checks → passes when | Role | Default | Verify on the VM |
 |----|-----------|--------------------------|------|---------|------------------|
-| 3.1 | L1 Manual | `db.system.users.find` with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` → none (CIS fix: drop them) | REPORT: lists them (PASS if none) | on | `mongosh … --eval 'db.getSiblingDB("admin").system.users.find({},{user:1,roles:1})'` |
+| 3.1 | L1 Manual | `db.system.users.find` with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` → none (CIS fix: drop them) | DECISION: lists them (PASS if none); revokes the 3 roles from accounts named in `mongodb8_cis_revoke_admin_roles` | on | `mongosh … --eval 'db.getSiblingDB("admin").system.users.find({},{user:1,roles:1})'` |
 | 3.2 | L1 Manual | `db.getUser()` / `getRole()` → each user has only appropriate roles | REPORT: authorization state + every user with roles | on | same as above |
 | 3.3 | L1 Manual | `ps -ef \| grep mongod` → runs as a dedicated non-root user | REPORT: unit `User=` and process owner, PASS if not root | on | `ps -o user= -C mongod` → `mongod` |
 | 3.4 | L1 Manual | `rolesInfo … showPrivileges` → only needed roles/privileges | REPORT: every user-defined role and its actions | on | `mongosh … --eval 'db.getSiblingDB("admin").getRoles({showPrivileges:true})'` |
@@ -83,15 +131,15 @@ without risk; a site that fills in its values gets the full benchmark.
 | 4.3 | L1 Auto | `net.tls.mode` → `requireTLS`, with `certificateKeyFile` and `CAFile` | PATCH: checks both PEM files exist → sets mode + files. Runs **first** in Section 4 (mongod refuses TLS options without TLS) | **off** | `grep -A6 'tls:' /etc/mongod.conf`; plain `mongosh --port <p>` must fail |
 | 4.1 | L2 Auto | `disabledProtocols` → includes `TLS1_0,TLS1_1` | PATCH: adds them (keeps others). TLS off → prints FAIL | on (L2) | `grep disabledProtocols /etc/mongod.conf` |
 | 4.2 | L1 Auto | Same key as 4.1 (CIS lists it twice, L1 and L2) | PATCH: same as 4.1 | on | same as 4.1 |
-| 4.4 | L2 Auto | `net.tls.FIPSMode: true`; log shows *"FIPS 140-2 mode activated"* | PATCH: sets it (needs TLS on) | **off** | `grep FIPSMode /etc/mongod.conf`; `grep -c 'FIPS 140 mode activated' /var/log/mongodb/mongod.log` |
-| 4.5 | L2 Manual | `security.enableEncryption: true` + key file / KMIP (CIS recommends KMIP) | REPORT: on/off + key management. Needs a key-management design, so the site does it | on (L2) | `grep -A4 '^security' /etc/mongod.conf` |
+| 4.4 | L2 Auto | `net.tls.FIPSMode: true`; the log shows FIPS mode activated | PATCH: sets it (needs TLS on) | **off** | `grep FIPSMode /etc/mongod.conf`; `grep -i 'fips' /var/log/mongodb/mongod.log \| tail -2` |
+| 4.5 | L2 Manual | `security.enableEncryption: true` + key file / KMIP (CIS recommends KMIP) | REPORT: on/off + key management. Needs a key-management design, so the site does it ([manual-remediation.md](manual-remediation.md) 4.5) | on (L2) | `grep -A4 '^security' /etc/mongod.conf` |
 
 ## Section 5: Audit Logging
 
 | ID | Lvl / type | CIS checks → passes when | Role | Default | Verify on the VM |
 |----|-----------|--------------------------|------|---------|------------------|
 | 5.1 | L1 Auto | `auditLog.destination` is set (syslog, console or file) | PATCH: adds `auditLog` if missing (`syslog` by default; site can pick `file` + JSON/BSON). Never replaces an existing one | on | `grep -A3 '^auditLog' /etc/mongod.conf`; `journalctl -t mongod -n 5` (syslog) |
-| 5.2 | L2 Manual | `auditLog.filter` matches the organisation's requirements | REPORT: shows the filter (none = everything is audited) | on (L2) | `grep -A6 '^auditLog' /etc/mongod.conf` |
+| 5.2 | L2 Manual | `auditLog.filter` matches the organisation's requirements | DECISION: shows the filter (none = everything is audited); writes `mongodb8_cis_audit_filter` if set | on (L2) | `grep -A6 '^auditLog' /etc/mongod.conf` |
 | 5.3 | L2 Auto | `systemLog.quiet` → `false` | PATCH: sets `false` if `true` (fresh install: already compliant) | on (L2) | `grep quiet /etc/mongod.conf` (absent or `false`) |
 | 5.4 | L2 Auto | `systemLog.logAppend` → `true` | PATCH: sets `true` if not (fresh install: already compliant) | on (L2) | `grep logAppend /etc/mongod.conf` |
 
@@ -100,14 +148,14 @@ without risk; a site that fills in its values gets the full benchmark.
 | ID | Lvl / type | CIS checks → passes when | Role | Default | Verify on the VM |
 |----|-----------|--------------------------|------|---------|------------------|
 | 6.1 | L1 Auto | `net.port` → not `27017` (value is "organisation defined") | PATCH: checks `mongodb8_cis_port` (1024–65535, not 27017) → SELinux label `mongod_port_t` → sets `net.port` | **off** | `grep port /etc/mongod.conf`; `ss -tlnp \| grep mongod`; `semanage port -l \| grep mongod_port_t` |
-| 6.2 | L2 Manual | `/proc/<pid>/limits` → f, t, v, m unlimited; n, u 64000 | REPORT: the six limits from systemd vs CIS | on (L2) | `cat /proc/$(pidof mongod)/limits` |
+| 6.2 | L2 Manual | `/proc/<pid>/limits` → f, t, v, m unlimited; n, u 64000 | DECISION: the six limits from systemd vs `mongodb8_cis_resource_limits` (CIS values); writes a systemd drop-in with `mongodb8_cis_fix_resource_limits: true` | on (L2) | `cat /proc/$(pidof mongod)/limits`; `systemctl cat mongod` (drop-in) |
 | 6.3 | L2 Manual | `security.javascriptEnabled` → `false` **if not needed** | DECISION: report; fix only with `mongodb8_cis_javascript_needed: false` | on (L2) | `grep javascriptEnabled /etc/mongod.conf` |
 
 ## Section 7: File Permissions
 
 | ID | Lvl / type | CIS checks → passes when | Role | Default | Verify on the VM |
 |----|-----------|--------------------------|------|---------|------------------|
-| 7.1 | L1 Manual | `ls -l` of `keyFile`, PEM key, `CAFile` → key files `600`, owned by the mongo user | REPORT: mode/owner of each, or "not applicable" | on | `ls -l /etc/pki/mongodb/` |
+| 7.1 | L1 Manual | `ls -l` of `keyFile`, PEM key, `CAFile` → key files `600`, owned by the mongo user | DECISION: mode/owner of each, or "not applicable"; sets `0600` + owner with `mongodb8_cis_fix_key_file_permissions: true` | on | `ls -l /etc/pki/mongodb/` |
 | 7.2 | L1 Manual | `stat -c %a <dbPath>` → `770`, owner/group = mongo user | DECISION: PASS/FAIL (RPM ships `755` → FAIL); fix with `mongodb8_cis_fix_db_path_permissions: true` | on | `stat -c '%a %U:%G' /var/lib/mongo` |
 
 ---
@@ -119,12 +167,12 @@ without risk; a site that fills in its values gets the full benchmark.
 | Recommendations in the benchmark | **23** | 13 Level 1, 10 Level 2 |
 | Automated, role fixes them (PATCH) | 10 | 2.1, 2.2, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 |
 | Automated, reported (doesn't apply to standalone) | 1 | 2.3 (sharded clusters) |
-| Manual, role reports | 10 | 1.1, 3.1–3.5, 4.5, 5.2, 6.2, 7.1 |
-| Manual, report + optional site decision | 2 | 6.3, 7.2 |
+| Manual, role reports | 6 | 1.1, 3.2–3.5, 4.5 ([manual-remediation.md](manual-remediation.md)) |
+| Manual, report + optional site decision | 6 | 3.1, 5.2, 6.2, 6.3, 7.1, 7.2 |
 | Off by default (risky / not applicable) | 6 | 2.1, 2.2, 2.3, 4.3, 4.4, 6.1 |
 | **Not covered** | **0** | |
 
 **What the role does NOT do, on purpose** (and why it's still CIS-correct):
-- **Fixing Manual rules** (dropping users, changing roles, encryption at rest): CIS says a person decides. The role gives that person the facts.
+- **Fixing Manual rules without a site decision** (changing roles, encryption at rest): CIS says a person decides. The role gives that person the facts; hand fixes are in [manual-remediation.md](manual-remediation.md), the reasoning in D20/D28.
 - **Creating certificates, choosing the port, inventing passwords:** CIS says "organisation defined". The role only uses the values you give.
 - **Upgrading MongoDB:** 1.1 is Manual, and a hardening run must never upgrade a database by surprise.

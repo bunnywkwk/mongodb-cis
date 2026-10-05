@@ -58,7 +58,7 @@ mongodb8_cis_port: 27100
 | Goal | Command |
 |------|---------|
 | Preview every change, touch nothing | `--check --diff` |
-| Report rules only (Manual rules, reports) | `--tags audit` |
+| Report rules only (Manual rules, reports), never change anything | `--tags audit --skip-tags patch` (a site-decision PATCH inside a report rule inherits its `audit` tag) |
 | One rule / skip one rule | `--tags rule_5.1` / `--skip-tags rule_6.1` |
 | By level | `--tags level1` or `--tags level1,level2` |
 
@@ -77,8 +77,24 @@ Their rule toggles are `false` by default. Turn each one on by name, after prepa
 | 6.1 | Non-default `net.port`; with SELinux enabled, labels it `mongod_port_t` | `mongodb8_cis_port` (1024–65535) | Every connection string using 27017; firewall rules |
 
 Other rules that change `mongod.conf` and restart `mongod` once: 4.1/4.2 (only when TLS is on), 5.1 (adds `auditLog`,
-default `syslog`, only when missing), 5.3, 5.4; opt-in site decisions 6.3 (`mongodb8_cis_javascript_needed: false`)
-and 7.2 (`mongodb8_cis_fix_db_path_permissions: true`). Every write keeps a backup of `mongod.conf`.
+default `syslog`, only when missing), 5.3, 5.4. Every write keeps a backup of `mongod.conf`.
+
+## Manual rules: report, or let the role apply your decision
+
+Manual rules only report by default. Where CIS gives one concrete fix, a variable lets the role apply your decision:
+
+| Rule | Variable (default = report only) | When set |
+|------|----------------------------------|----------|
+| 3.1 | `mongodb8_cis_revoke_admin_roles: []` | revokes `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin from the listed accounts, e.g. `["admin.badadmin"]` |
+| 5.2 | `mongodb8_cis_audit_filter: ""` | writes your `auditLog.filter` (auditing must be on, 5.1) |
+| 6.2 | `mongodb8_cis_fix_resource_limits: false` | writes `mongodb8_cis_resource_limits` (CIS values) as a systemd drop-in, restarts mongod |
+| 6.3 | `mongodb8_cis_javascript_needed: true` | `false` → `security.javascriptEnabled: false` |
+| 7.1 | `mongodb8_cis_fix_key_file_permissions: false` | key, TLS key and CA files → `0600`, owner mongod |
+| 7.2 | `mongodb8_cis_fix_db_path_permissions: false` | dbPath → `0770`, owner mongod |
+
+The other Manual rules (1.1, 3.2–3.5, 4.5) need a person; hand fixes and the reasons are in
+[`docs/manual-remediation.md`](docs/manual-remediation.md). How to prove a host is compliant:
+[`docs/compliance-test.md`](docs/compliance-test.md).
 
 ## Optional extra: SELinux confinement (not a CIS recommendation)
 

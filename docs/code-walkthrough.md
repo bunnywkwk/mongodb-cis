@@ -152,11 +152,11 @@ only if you set the decision variable.
 | 2.2 | L1 | PATCH, **off by default** | Counts database users → stops if there are none → sets `setParameter.enableLocalhostAuthBypass: false` | Without a user, turning off the localhost exception would lock everyone out (D26) |
 | 2.3 | L2 | REPORT, off by default | Shows `clusterAuthMode` / `keyFile`, or "not applicable" on standalone | Sharded clusters only |
 
-### Section 3: Authorization (`tasks/section_3/`), all REPORT, read from the database
+### Section 3: Authorization (`tasks/section_3/`), REPORT, read from the database (3.1 + optional revoke)
 
 | Rule | Lvl | Shows |
 |------|-----|-------|
-| 3.1 | L1 | Users with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` (PASS if none) |
+| 3.1 | L1 | Users with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` (PASS if none), named `<db>.<user>`. Accounts listed in `mongodb8_cis_revoke_admin_roles` lose those roles (`revokeRolesFromUser`, D20) |
 | 3.2 | L1 | Authorization on/off and every user with their roles |
 | 3.3 | L1 | Who mongod runs as (unit `User=` and the real process owner). PASS if not root |
 | 3.4 | L1 | Every user-defined role, its actions and inherited roles |
@@ -181,7 +181,7 @@ Each DB read is `mongodb_shell` with `changed_when: false` and `check_mode: fals
 | Rule | Lvl | Type | What it does |
 |------|-----|------|--------------|
 | 5.1 | L1 | PATCH | If there is no `auditLog`, adds one (`syslog` by default; `file` needs JSON/BSON). Never replaces an existing one (D21) |
-| 5.2 | L2 | REPORT | Shows `auditLog.filter` (or "auditing off, see 5.1") |
+| 5.2 | L2 | DECISION | Shows `auditLog.filter` (or "auditing off, see 5.1"). With `mongodb8_cis_audit_filter` set (and auditing on) → writes it (D20) |
 | 5.3 | L2 | PATCH | If `systemLog.quiet` is true → sets `false`. Fresh install: already compliant |
 | 5.4 | L2 | PATCH | If `systemLog.logAppend` isn't true → sets `true`. Fresh install: already compliant |
 
@@ -190,14 +190,14 @@ Each DB read is `mongodb_shell` with `changed_when: false` and `check_mode: fals
 | Rule | Lvl | Type | What it does |
 |------|-----|------|--------------|
 | 6.1 | L1 | PATCH, **off by default** | Checks `mongodb8_cis_port` (1024–65535, not 27017) → labels it `mongod_port_t` for SELinux (if enforcing and not a MongoDB default port) → sets `net.port`. The restart handler then waits on the **new** port (D11) |
-| 6.2 | L2 | REPORT | The six limits of the running service vs CIS (f, t, v, m = unlimited; n, u = 64000), from systemd (D14) |
+| 6.2 | L2 | DECISION | The six limits of the running service vs `mongodb8_cis_resource_limits` (CIS: f, t, v, m = unlimited; n, u = 64000), from systemd (D14). With `mongodb8_cis_fix_resource_limits: true` and drift → systemd drop-in + restart (D20) |
 | 6.3 | L2 | DECISION | Shows `security.javascriptEnabled`. With `mongodb8_cis_javascript_needed: false` → sets it `false` (D20) |
 
 ### Section 7: File Permissions (`tasks/section_7/`)
 
 | Rule | Lvl | Type | What it does |
 |------|-----|------|--------------|
-| 7.1 | L1 | REPORT | Mode/owner of `keyFile`, TLS key and CA file from `mongod.conf`, or "not applicable" if none |
+| 7.1 | L1 | DECISION | PASS/FAIL per `keyFile`, TLS key and CA file (0600/0400, owner **and** group = service user), or "not applicable". With `mongodb8_cis_fix_key_file_permissions: true` → `0600` + owner (D20) |
 | 7.2 | L1 | DECISION | dbPath PASS/FAIL vs `0770`, owner = service user (RPM ships `0755` → FAIL). With `mongodb8_cis_fix_db_path_permissions: true` → fixes it (D20) |
 
 ---
@@ -218,7 +218,7 @@ Runs only with `mongodb8_cis_selinux_policy: true` and SELinux enabled (D17):
 ## 9. `handlers/main.yml`: one restart, then a check
 
 Both handlers listen to `Restart mongod`. They run **once**, at the end, and only if a PATCH changed something:
-1. restart mongod;
+1. restart mongod (`daemon_reload: true`, so a 6.2 drop-in is read);
 2. wait up to 60 s until it accepts connections on its (possibly new) address and port.
 
 If a config change broke mongod, the run fails **here**, right after the change. mongod has no config dry-run, so this is the check (D7).

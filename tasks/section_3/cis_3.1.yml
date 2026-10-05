@@ -9,12 +9,14 @@
     - audit
     - rule_3.1
     - authorization
+  vars:
+    mongodb8_cis_3_1_roles: [dbOwner, userAdmin, userAdminAnyDatabase]
   block:
     - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Find dbOwner, userAdmin, userAdminAnyDatabase in admin"
       community.mongodb.mongodb_shell:
         eval: >-
           db.getSiblingDB('admin').system.users.find({'roles.role': {$in: ['dbOwner', 'userAdmin', 'userAdminAnyDatabase']},
-          'roles.db': 'admin'}, {_id: 0, user: 1, db: 1}).toArray()
+          'roles.db': 'admin'}, {_id: 1, roles: 1}).toArray()
         transform: json
       register: discovered_3_1_users
       changed_when: false
@@ -25,4 +27,20 @@
         msg: >-
           3.1 {{ 'PASS' if discovered_3_1_users['transformed_output'] | length == 0 else 'REVIEW' }}:
           accounts with dbOwner, userAdmin or userAdminAnyDatabase in admin:
-          {{ discovered_3_1_users['transformed_output'] | map(attribute='user') | join(', ') or 'none' }}.
+          {{ discovered_3_1_users['transformed_output'] | map(attribute='_id') | join(', ') or 'none' }}.
+          CIS: drop these roles (list an account in mongodb8_cis_revoke_admin_roles to let the role do it).
+
+    # CIS remediation: drop these roles. Only for the accounts the site lists (site decision); the account itself stays.
+    - name: "3.1 | PATCH | Ensure least privilege for database accounts | Revoke the roles from the listed accounts"
+      when:
+        - item['_id'] in mongodb8_cis_revoke_admin_roles
+        - item['roles'] | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | length > 0
+      community.mongodb.mongodb_shell:
+        eval: >-
+          db.getSiblingDB({{ item['_id'].split('.')[0] | to_json }}).revokeRolesFromUser({{ item['_id'].split('.', 1)[1] | to_json }},
+          {{ item['roles'] | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | to_json }})
+      loop: "{{ discovered_3_1_users['transformed_output'] }}"
+      loop_control:
+        label: "{{ item['_id'] }}"
+      tags:
+        - patch
