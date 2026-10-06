@@ -51,7 +51,7 @@ variable) · 📋 REPORT (a person decides) · ➖ not applicable on a standalon
 | ➖ Not applicable (standalone) | 1 | 2.3 |
 
 **Fully compliant run:** Level 2 on, the ⚠️ rules on with their values, the 🔧? variables set, and the 📋 items reviewed
-by a person. Proof: [compliance-test.md](compliance-test.md). Example settings: `sysconfig/group_vars/mongodb/main.yml` in the
+by a person. Proof: [compliance-test.md](compliance-test.md). Example settings: `sysconfig/group_vars/mongodb.yml` in the
 test project.
 
 ## Status (2026-10-06, branch `main`)
@@ -60,6 +60,6 @@ test project.
 |------|-------|
 | All 23 rules | implemented; lint (production) and `--syntax-check` clean |
 | Latest change | 3.4 drop list and 3.5 revoke list (with the admin guard): **accepted by the user** (D30) |
-| VM-tested | earlier rules on `main` (T1–T10, 2026-10-01). **Not yet:** the 8 opt-in options on a real mongod, RHEL 8 overall, FIPS on RHEL 10 |
+| VM-tested | **compliance test passed on RHEL 8, 9 and 10, Level 2** (2026-10-06; [test-results.md](test-results.md)). Not yet on a real mongod: the 3.1/3.4/3.5 revoke and drop lists with entries |
 | Next | compliance test per VM ([compliance-test.md](compliance-test.md)), opt-in tests in [session-handoff.md](session-handoff.md) section 3 |
 

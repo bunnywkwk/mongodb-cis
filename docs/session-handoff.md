@@ -52,7 +52,7 @@ Then the same procedure as the rebuild, on a **fresh snapshot** per VM (`docs/co
 ansible <host> -m setup -a 'filter=ansible_distribution*'
 ansible-playbook playbooks/site.yml --limit <host> | tee runs/main-<host>-c2.log   # FULL BENCHMARK block commented
 ansible-playbook playbooks/prep-tls.yml --limit <host>
-# uncomment the FULL BENCHMARK block in group_vars/mongodb/main.yml
+# uncomment the FULL BENCHMARK block in group_vars/mongodb.yml
 ansible-playbook playbooks/site.yml --limit <host> --force-handlers | tee runs/main-<host>-c3.log
 ansible-playbook playbooks/site.yml --limit <host> | tee runs/main-<host>-c3-rerun.log   # changed=0
 ```
@@ -107,8 +107,8 @@ or pymongo (structured output, `mongodb_user` for 2.1)? Which branch becomes the
 
 ## 8. Test project change (2026-10-06)
 
-`mongodb8-cis-test`: **one settings file, no profiles** (`profiles/` removed). `sysconfig/group_vars/mongodb/main.yml`
+`mongodb8-cis-test`: **one settings file, no profiles** (`profiles/` removed). `sysconfig/group_vars/mongodb.yml`
 holds the site values, `lab_tls_*` and Level 1 + 2; the **FULL BENCHMARK** block at the end (risky rules + site
 decisions) is **commented** for the first install (S2) and **uncommented** after `prep-tls.yml` (S4). Comment it again
-before the next fresh VM. `prep-tls.yml` is configurable: `lab_tls_cert_src`, `lab_tls_key_src` (separate key → joined
-into one PEM), `lab_tls_ca_src`; it stops with a message if MongoDB isn't installed (T-M9).
+before the next fresh VM. `prep-tls.yml` is configurable: `lab_tls_cert_src` (cert + key PEM)
+and `lab_tls_ca_src`; it stops with a message if MongoDB isn't installed (T-M9).

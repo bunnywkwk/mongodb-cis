@@ -65,3 +65,19 @@ Act as a DBA who must harden MongoDB to CIS, using only the README + `defaults/m
 
 Per-host proof against every CIS Audit procedure: [compliance-test.md](compliance-test.md). Run it on `main` after
 the rebuild branch (see [session-handoff.md](session-handoff.md)).
+
+## Compliance test result (2026-10-06, branch `main`)
+
+| Host | Full benchmark run | Rerun | Host checks (CIS Audit) | Verdict |
+|------|--------------------|-------|-------------------------|---------|
+| RHEL 8 | ok=68 changed=11 failed=0, 1 restart | changed=0 | 18 ✅ · 2.3 ➖ · 3.2/3.5/5.2 👤 reviewed · 4.5 👤 exception · 0 ❌ | **Level 2 compliant** |
+| RHEL 9 | ok=68 changed=11 failed=0, 1 restart | changed=0 | same | **Level 2 compliant** |
+| RHEL 10 | ok=68 changed=11 failed=0, 1 restart | changed=0 | same | **Level 2 compliant** |
+
+- Accepted exception on all hosts: 4.5 encryption at rest (no key management in the lab; `manual-remediation.md` 4.5).
+- Extra (RHEL 8): an application with its own client certificate and `readWrite@shop` user works; no TLS, no client
+  certificate, wrong password and other databases are refused.
+- Found during the test: FIPS log wording differs by OS (RHEL 8 `FIPS 140-2 mode activated`, RHEL 9/10 `FIPS 140 mode
+  activated`, same id 23172); confirm FIPS with `getCmdLineOpts` instead of the log text.
+- Full record, logs and 25 screenshots: `mongodb8-cis-test/docs/compliance-test.md`.
+

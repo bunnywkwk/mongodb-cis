@@ -13,7 +13,7 @@ rule by rule.
 | Hosts / OS | `rhel8-mongo`, `rhel9-mongo`, `rhel10-mongo` / `cat /etc/redhat-release` → |
 | MongoDB | `mongod --version` → |
 | Role | branch `main`, commit → (`git log --oneline -1` in the installed role) |
-| Settings | `mongodb8-cis-test/sysconfig/group_vars/mongodb/main.yml`: site values + Level 1/2 always; the FULL BENCHMARK block (risky rules, site decisions) commented for S2, uncommented for S4; TLS files from `lab_tls_*` |
+| Settings | `mongodb8-cis-test/sysconfig/group_vars/mongodb.yml`: site values + Level 1/2 always; the FULL BENCHMARK block (risky rules, site decisions) commented for S2, uncommented for S4; TLS files from `lab_tls_*` |
 | Date / tester | |
 
 ## How `main` differs from the rebuild (what to expect)
@@ -55,7 +55,7 @@ ansible-galaxy install -r requirements.yml -p roles --force                     
 ansible mongodb -m setup -a 'filter=ansible_distribution*'                                     # S1 real OS per host
 ansible-playbook playbooks/site.yml                                                           # S2 install, safe defaults (FULL BENCHMARK block commented)
 ansible-playbook playbooks/prep-tls.yml                                                        # S3 TLS files (lab_tls_* → /etc/pki/mongodb)
-# uncomment the FULL BENCHMARK block in sysconfig/group_vars/mongodb/main.yml
+# uncomment the FULL BENCHMARK block in sysconfig/group_vars/mongodb.yml
 ansible-playbook playbooks/site.yml --force-handlers                                          # S4 full benchmark
 ansible-playbook playbooks/site.yml                                                           # S5 rerun: changed=0
 ```
