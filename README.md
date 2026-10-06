@@ -92,8 +92,9 @@ Manual rules only report by default. Where CIS gives one concrete fix, a variabl
 | 7.1 | `mongodb8_cis_fix_key_file_permissions: false` | key, TLS key and CA files → `0600`, owner mongod |
 | 7.2 | `mongodb8_cis_fix_db_path_permissions: false` | dbPath → `0770`, owner mongod |
 
-The other Manual rules (1.1, 3.2–3.5, 4.5) need a person; hand fixes and the reasons are in
-[`docs/manual-remediation.md`](docs/manual-remediation.md). How to prove a host is compliant:
+The other Manual rules (1.1, 3.2–3.5, 4.5) need a person; hand fixes are in
+[`docs/manual-remediation.md`](docs/manual-remediation.md), and why they aren't automated in
+[`docs/automation-decisions.md`](docs/automation-decisions.md). How to prove a host is compliant:
 [`docs/compliance-test.md`](docs/compliance-test.md).
 
 ## Optional extra: SELinux confinement (not a CIS recommendation)

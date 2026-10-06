@@ -82,7 +82,7 @@ Not implemented on purpose:
 |----|-----------|--------------------------|------|---------|------------------|
 | 5.1 | L1 Auto | `auditLog.destination` is set (syslog, console or file) | PATCH: adds `auditLog` if missing (`syslog` by default; site can pick `file` + JSON/BSON). Never replaces an existing one | on | `grep -A3 '^auditLog' /etc/mongod.conf`; `journalctl -t mongod -n 5` (syslog) |
 | 5.2 | L2 Manual | `auditLog.filter` matches the organisation's requirements | DECISION: shows the filter (none = everything is audited); writes `mongodb8_cis_audit_filter` if set | on (L2) | `grep -A6 '^auditLog' /etc/mongod.conf` |
-| 5.3 | L2 Auto | `systemLog.quiet` → `false` | PATCH: sets `false` if `true` (fresh install: already compliant) | on (L2) | `grep quiet /etc/mongod.conf` (absent or `false`) |
+| 5.3 | L2 Auto | `systemLog.quiet` → `false` | PATCH: writes `quiet: false` unless already explicitly `false` (fresh install: added) | on (L2) | `grep quiet /etc/mongod.conf` → `quiet: false` |
 | 5.4 | L2 Auto | `systemLog.logAppend` → `true` | PATCH: sets `true` if not (fresh install: already compliant) | on (L2) | `grep logAppend /etc/mongod.conf` |
 
 ## Section 6: Operating System Hardening

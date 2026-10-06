@@ -8,7 +8,8 @@ Source: CIS MongoDB 8 Benchmark v2.0.0, Remediation of each rule; MongoDB 8.0 ma
 
 ## Rules without an automated fix
 
-How each was weighed (one concrete fix, simple input, safe if wrong, worth it): [design-decisions.md](design-decisions.md) D29.
+How each was weighed (one concrete fix, simple input, safe if wrong, worth it), with what an automated option would
+have looked like: [automation-decisions.md](automation-decisions.md) (summary: D29).
 
 All other rules are automated, or have an optional site variable (D20). Risky automated rules (2.1, 2.2, 4.3, 4.4, 6.1)
 are off by default but **are** automated: turn them on in `group_vars`.

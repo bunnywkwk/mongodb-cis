@@ -191,3 +191,20 @@ rhel9-mongo                : ok=42   changed=5    unreachable=0    failed=1    s
 - **Fix:** `ansible-playbook playbooks/prep-tls.yml --limit rhel9-mongo`, then rerun the C3 profile.
 - **Prevent:** follow the order in [compliance-test.md](compliance-test.md) (S3 before S4). Add `--force-handlers` to
   runs that change the config, so a later failure still restarts mongod with what was already written.
+
+## T-M9: `prep-tls.yml` fails with "failed to look up group mongod" (2026-10-05, compliance test, RHEL 8/9/10)
+
+**Symptom**
+```
+TASK [Create /etc/pki/mongodb] *************************************************
+fatal: [rhel8-mongo]: FAILED! => {"changed": false, "gid": 0, "group": "root", "mode": "0755", "msg": "chgrp failed: failed to look up group mongod", "owner": "root", "path": "/etc/pki/mongodb", "secontext": "unconfined_u:object_r:cert_t:s0", "size": 6, "state": "directory", "uid": 0}
+```
+(same on `rhel9-mongo` and `rhel10-mongo`)
+
+**Cause:** `prep-tls.yml` (test project) ran on fresh VMs before MongoDB was installed. The `mongod` user and group are
+created by the MongoDB RPM, so `group: mongod` can't be set yet. The directory was created as `root:root 0755`.
+
+**Fix:** run the install step first (`site.yml -e @profiles/c2-level2-defaults.yml`, `mongodb8_cis_install: true`),
+check `ansible mongodb -m command -a 'id mongod'`, then rerun `prep-tls.yml`; it corrects the directory's group and mode.
+
+**Prevent:** follow the step order in [compliance-test.md](compliance-test.md): S2 install → S3 TLS files → S4 full benchmark.

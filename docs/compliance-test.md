@@ -98,7 +98,7 @@ Screenshots: `docs/evidence-images/NN-<os>-<rule>-<result>.png` (next free numbe
 | 4.5 | 2 | M | `grep -A3 enableEncryption /etc/mongod.conf` | lab: not enabled → 👤 accepted exception (no key management in the lab) | | | | |
 | 5.1 | 1 | A | `grep -A3 '^auditLog' /etc/mongod.conf`; `sudo journalctl -t mongod -n 3` | `destination: syslog`; audit events in the journal | | | | |
 | 5.2 | 2 | M | `grep -A4 '^auditLog' /etc/mongod.conf` | no `filter` = all events audited (or the site's agreed filter) → 👤 | | | | (5.1) |
-| 5.3 | 2 | A | `grep -A6 '^systemLog' /etc/mongod.conf` | `quiet` absent or `false` | | | | |
+| 5.3 | 2 | A | `grep -A6 '^systemLog' /etc/mongod.conf` | `quiet: false` | | | | |
 | 5.4 | 2 | A | same | `logAppend: true` | | | | (5.3) |
 | 6.1 | 1 | A | `grep -A2 '^net' /etc/mongod.conf`; `sudo ss -tlnp \| grep mongod`; `sudo semanage port -l \| grep mongod_port_t` | `port: 27100`; listening on 27100; 27100 labelled | | | | |
 | 6.2 | 2 | M | `sudo cat /proc/$(pidof mongod)/limits` | file size, cpu time, address space, resident set: unlimited; open files, processes: 64000 | | | | |

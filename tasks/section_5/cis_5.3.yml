@@ -3,7 +3,8 @@
   when:
     - mongodb8_cis_rule_5_3
     - mongodb8_cis_level_2
-    - discovered_mongod_conf['systemLog']['quiet'] | default(false) is true
+    # CIS audit greps mongod.conf for quiet: write it explicitly, not only when it is true (D10).
+    - discovered_mongod_conf['systemLog']['quiet'] | default(true) is not false
   tags:
     - level2
     - automated

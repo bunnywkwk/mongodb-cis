@@ -102,6 +102,11 @@ The benchmark marks these as Enterprise features. This role targets Enterprise, 
 
 - **Decision:** apply 5.3 (`systemLog.quiet: false`) as written.
 - **Why:** S5 5.3 says *"This check is only for Enterprise editions"*, and the role targets Enterprise. A fresh install is already compliant (`quiet` not set, default `false`, S3/S4), so the PATCH only runs if someone set `quiet: true`.
+- **Revised 2026-10-05 (user decision, compliance test on RHEL 10):** the PATCH now also runs when `quiet` is **absent**, so
+  `mongod.conf` always contains `quiet: false`. Why: CIS's audit is `cat /etc/mongod.conf | grep "quiet"` and its
+  remediation says *"Set quiet: false"*; with the key absent the grep finds nothing, although the effective value is
+  already `false`. Cost: one more key on a fresh install, written in the same run (and restart) as 5.1. Condition:
+  `... | default(true) is not false` (same pattern as 6.3).
 - **Revised 2026-10-01:** this was a deviation (5.3 applied on Community) waiting for the mentor's confirmation. With Enterprise it is no longer a deviation.
 
 ## D11. Rule 6.1 (non-default port) and SELinux
@@ -473,6 +478,7 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
   complex input that end users would get wrong, where a mistake costs an outage, a lockout or data. A clear report plus
   a written hand fix ([manual-remediation.md](manual-remediation.md)) is safer and still CIS-correct: CIS marks 1.1,
   3.x and 4.5 **Manual**, which only requires a person to review them.
+- **Full weighing per rule** (what an option would look like, cost, risk): [automation-decisions.md](automation-decisions.md).
 - **Revisit when:** a site provides a KMIP server (4.5 option B in manual-remediation.md), or the role adds replica
   set/sharding support (2.3).
 

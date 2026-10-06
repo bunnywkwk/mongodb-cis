@@ -132,7 +132,7 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 |------|------|-----------|-------------|---------------|
 | **5.1** (L1) | Automated | Adds `auditLog` **only if missing** (an existing one is never changed) | `mongodb8_cis_audit_log` (default `{destination: syslog}`; for a file add `format` + `path`) | ✅ added (changed) |
 | **5.2** (L2) | Manual + optional fix | Shows the filter (none = everything audited); writes yours if set and auditing is on | `mongodb8_cis_audit_filter: '{ atype: { $in: [ "authenticate" ] } }'` | 👤 no filter |
-| **5.3** (L2) | Automated | `systemLog.quiet: false` only if someone set `true` | — | ✅ PASS |
+| **5.3** (L2) | Automated | Writes `systemLog.quiet: false` unless it is already explicitly `false`, so CIS's `grep quiet` finds it | — | ✅ added (changed) |
 | **5.4** (L2) | Automated | `systemLog.logAppend: true` if not set | — | ✅ PASS (RPM sets it) |
 
 **Variables in the code**
@@ -144,7 +144,7 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 | 5.1 | `mongodb8_cis_5_1_settings` | `{auditLog: <your block>}`, merged into `mongod.conf` like 5.3/5.4 |
 | 5.1 | assert | stops on a typo: destination not `syslog`/`console`/`file`, or `file` without `format` (`JSON`/`BSON`) and `path` |
 | 5.2 | `when:` of the PATCH | a filter is set **and** auditing is on **and** the current filter differs |
-| 5.3 | `mongodb8_cis_5_3_settings` + `when: ... is true` | `{systemLog: {quiet: false}}`, written only if `quiet` is really `true` |
+| 5.3 | `mongodb8_cis_5_3_settings` + `when: ... \| default(true) is not false` | `{systemLog: {quiet: false}}`; missing counts as "not written yet", so a fresh install gets the explicit line (D10) |
 | 5.4 | `mongodb8_cis_5_4_settings` + `when: ... is not true` | `{systemLog: {logAppend: true}}` |
 
 - `syslog` by default: the OS rotates and can forward it; a file isn't rotated by mongod (D21).
