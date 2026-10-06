@@ -70,8 +70,8 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 | **3.1** (L1) | Manual + optional fix | Runs CIS's own query: accounts with `dbOwner`, `userAdmin` or `userAdminAnyDatabase` **in admin**. PASS if none; revokes those roles from accounts you list | `mongodb8_cis_revoke_admin_roles: ["admin.badadmin"]` | ✅ PASS (no users) |
 | **3.2** (L1) | Manual, report | Authorization state + every user with its roles | — | 👤 REVIEW |
 | **3.3** (L1) | Manual, report | PASS if mongod's unit `User=` and the running process are not root | — | ✅ PASS (`mongod`) |
-| **3.4** (L1) | Manual, report | Every **user-defined** role and its actions (built-in roles are fixed by MongoDB) | — | 👤 0 roles |
-| **3.5** (L2) | Manual, report | Users holding a superuser/admin role | — | 👤 REVIEW |
+| **3.4** (L1) | Manual, report + opt-in | Every **user-defined** role and its actions (built-in roles are fixed by MongoDB); drops the roles in `mongodb8_cis_drop_custom_roles` | — | 👤 0 roles |
+| **3.5** (L2) | Manual, report + opt-in | Users holding a superuser/admin role; revokes them from accounts in `mongodb8_cis_revoke_superuser_roles` (never the role's own admin) | — | 👤 REVIEW |
 
 **Variables in the code**
 
@@ -88,7 +88,7 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 - The 2.1 admin shows up in 3.2 and 3.5 with `root`: expected, CIS's own 2.1 remediation creates it that way.
 - `main` reads users with `mongodb_shell` + CIS's queries on `admin.system.users`, so **every** user is seen (D13).
-- Why 3.2–3.5 have no fix: [design-decisions.md](design-decisions.md) D28/D29; by hand: [manual-remediation.md](manual-remediation.md).
+- 3.4/3.5 options: D30. Why 3.2/3.3 have no fix: [design-decisions.md](design-decisions.md) D28/D29; by hand: [manual-remediation.md](manual-remediation.md).
 
 ---
 

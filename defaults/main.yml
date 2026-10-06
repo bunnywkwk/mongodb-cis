@@ -52,8 +52,12 @@ mongodb8_cis_rule_3_2: true
 mongodb8_cis_rule_3_3: true
 # 3.4 (L1, Manual) Ensure that each role for each MongoDB database is needed and grants only the necessary privileges
 mongodb8_cis_rule_3_4: true
+# WARNING: a dropped role is removed from every user that held it; check the 3.4 report first.
+mongodb8_cis_drop_custom_roles: []      # ↳ custom roles as the 3.4 report names them (<database>.<role>), e.g. ["shop.orderReader"]
 # 3.5 (L2, Manual) Review Superuser/Admin Roles
 mongodb8_cis_rule_3_5: true
+# WARNING: the listed accounts lose every superuser/admin role 3.5 reports; never list the role's own admin (stopped).
+mongodb8_cis_revoke_superuser_roles: [] # ↳ accounts as the 3.5 report names them (<database>.<user>), e.g. ["admin.ops"]
 
 # Section 4 - Data Encryption
 # 4.1 (L2, Automated) Ensure legacy TLS protocols are disabled

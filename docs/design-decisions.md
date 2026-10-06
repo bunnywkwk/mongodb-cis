@@ -323,13 +323,15 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
   | Rule | Site variable | Default | When set |
   |------|---------------|---------|----------|
   | 3.1 | `mongodb8_cis_revoke_admin_roles` | `[]` | revokes `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin from the **listed** accounts only (`<db>.<user>`, `mongodb_shell` `revokeRolesFromUser`); the account and its other roles stay |
+  | 3.4 | `mongodb8_cis_drop_custom_roles` | `[]` | drops the **listed** custom roles (`<db>.<role>`, `dropRole`); users that held one lose it (D30) |
+  | 3.5 | `mongodb8_cis_revoke_superuser_roles` | `[]` | revokes every 3.5 superuser/admin role from the **listed** accounts; never the role's own admin (D30) |
   | 5.2 | `mongodb8_cis_audit_filter` | `""` | writes `auditLog.filter` (only when auditing is on) |
   | 6.2 | `mongodb8_cis_fix_resource_limits` + `mongodb8_cis_resource_limits` (CIS values) | `false` | systemd drop-in with the limits, restart (only on drift) |
   | 6.3 | `mongodb8_cis_javascript_needed` | `true` | `false` → `security.javascriptEnabled: false` |
   | 7.1 | `mongodb8_cis_fix_key_file_permissions` | `false` | existing keyFile / TLS key / CA → `0600`, owner and group mongod |
   | 7.2 | `mongodb8_cis_fix_db_path_permissions` | `false` | dbPath → `0770`, owner mongod |
 
-  Report-only: 1.1 (never auto-upgrade), 3.2–3.5 (D28), 4.5 (key management design, evidence in
+  Report-only: 1.1 (never auto-upgrade), 3.2, 3.3 (D28), 4.5 (key management design, evidence in
   [manual-remediation.md](manual-remediation.md)).
 - **Why:** CIS marks a rule Manual because *"the expected state can vary depending on the environment"* (S5,
   Assessment Status). A variable set by the site is the site's decision, not the role guessing (CLAUDE.md principle 5).
@@ -425,6 +427,8 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 
 ## D28. Section 3 (Authorization): report only, except an opt-in revoke list for 3.1
 
+> **Revised 2026-10-06 by D30:** 3.4 and 3.5 also got opt-in name lists. 3.2 and 3.3 stay report only.
+
 - **Decision:** 3.2–3.5 report only; 3.1 reports and has one opt-in site variable (`mongodb8_cis_revoke_admin_roles: []`).
   Hand fixes: [manual-remediation.md](manual-remediation.md). User decision 2026-10-04/05.
 - **How each rule was weighed** (same four questions for every rule):
@@ -456,6 +460,9 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 
 ## D29. Coverage: every rule is implemented; 7 stay report-only on purpose
 
+> **Revised 2026-10-06 by D30:** 3.4 and 3.5 moved to opt-in. Now 18 can change the host (10 Automated + 8 Manual with an
+> opt-in variable) and **5 only report: 1.1, 2.3, 3.2, 3.3, 4.5.**
+
 - **Decision:** all 23 recommendations have a task. 16 change the host (10 Automated PATCH rules + 6 Manual rules with
   an opt-in site variable, D20). 7 only report: 1.1, 2.3, 3.2, 3.3, 3.4, 3.5, 4.5. User decision 2026-10-05.
 - **How a rule was weighed** (an option is added only if the answer to all four is "yes"):
@@ -482,11 +489,36 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 - **Revisit when:** a site provides a KMIP server (4.5 option B in manual-remediation.md), or the role adds replica
   set/sharding support (2.3).
 
+## D30. Rules 3.4 and 3.5: opt-in name lists (revises D28, D29)
+
+- **Decision (2026-10-06, user direction; implementation accepted by the user the same day):** let a site target
+  specific objects, like 3.1. Empty list (default) = report only.
+
+  | Rule | Variable | Entry | Does | Guard |
+  |------|----------|-------|------|-------|
+  | 3.4 | `mongodb8_cis_drop_custom_roles: []` | `<db>.<role>` as the 3.4 report prints it | `db.getSiblingDB(db).dropRole(role)` | only custom roles are listed (built-in roles can't be dropped) |
+  | 3.5 | `mongodb8_cis_revoke_superuser_roles: []` | `<db>.<user>` as the 3.5 report prints it | `revokeRolesFromUser` with every 3.5 role the account holds (`root`, `dbOwner`, `userAdmin*`, `*AnyDatabase`, `clusterAdmin`, `hostManager`, on any database) | assert: `admin.<mongodb8_cis_admin_user>` is never in the list (the role logs in with it, D24) |
+
+- **Why it is now acceptable** (D29's four questions, answered again):
+  1. **Concrete fix:** CIS 3.4 description *"eliminating unneeded roles"*; 3.5 remediation `revokeRolesFromUser`.
+     The site names the object, so "necessary/legitimate" stays a person's decision; the role only executes it.
+  2. **Simple input:** a list of names copied from the report, same shape as 3.1. The rejected 3.4 design
+     (`revokePrivilegesFromRole`: role + resource + actions) stays rejected; dropping a whole role is the simple form.
+  3. **Safe if wrong:** limited to what is listed. 3.5 can't remove the role's own admin, which (with 2.1) holds `root`,
+     so the server always keeps an admin. Dropping a role or revoking admin roles is undone by hand (`createRole`,
+     `grantRolesToUser`); no data is touched.
+  4. **Worth it:** drift on long-lived servers (old roles, extra admins).
+- **Idempotent:** a dropped role or a revoked account no longer matches the next read, so the PATCH is skipped
+  (`changed=0`). `mongodb_shell` always reports `changed`, so it only runs when there is something to do.
+- **Read-only runs:** the PATCH steps are tagged `patch`; use `--tags audit --skip-tags patch` (README).
+- **Tested:** expressions with fake `mongosh` output (2026-10-06): only listed objects; a listed account without 3.5 roles and
+  an unlisted role skipped; the guard stops the run when the role's admin is listed. **Not yet on a real mongod.**
+
 ## Not adopted
 
 - **Lockdown's Goss audit framework** (`setup_audit`, `run_audit`, `audit_only`, L3): it adds an extra tool and binary to maintain. The AUDIT steps plus `--check --diff` already give a read-only compliance view.
 - **Per-OS vars files** (`vars/RedHat.yml`, `vars/Rocky.yml`, ...): there is no per-OS difference (D1).
-- **Section 3 fixes for 3.2–3.5** (declared users/roles via `mongodb_user`/`mongodb_role`, drop lists): report only (D28,
+- **Section 3 fixes for 3.2–3.3** (declared users/roles via `mongodb_user`/`mongodb_role`; 3.4/3.5 name lists adopted in D30): report only (D28,
   user decision 2026-10-04/05). A 3.2 declared-accounts list was built on the rebuild branch and reverted as too complex.
 - **3.3 fix** (switch a root-run mongod to a service account): the RPM already passes; the FAIL case means re-owning
   unknown files, and one miss stops mongod. Hand steps in [manual-remediation.md](manual-remediation.md).

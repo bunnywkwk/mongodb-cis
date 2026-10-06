@@ -86,13 +86,15 @@ Manual rules only report by default. Where CIS gives one concrete fix, a variabl
 | Rule | Variable (default = report only) | When set |
 |------|----------------------------------|----------|
 | 3.1 | `mongodb8_cis_revoke_admin_roles: []` | revokes `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin from the listed accounts, e.g. `["admin.badadmin"]` |
+| 3.4 | `mongodb8_cis_drop_custom_roles: []` | drops the custom roles you list, e.g. `["shop.orderReader"]` |
+| 3.5 | `mongodb8_cis_revoke_superuser_roles: []` | revokes every superuser/admin role from the listed accounts, e.g. `["admin.ops"]`; never the role's own admin |
 | 5.2 | `mongodb8_cis_audit_filter: ""` | writes your `auditLog.filter` (auditing must be on, 5.1) |
 | 6.2 | `mongodb8_cis_fix_resource_limits: false` | writes `mongodb8_cis_resource_limits` (CIS values) as a systemd drop-in, restarts mongod |
 | 6.3 | `mongodb8_cis_javascript_needed: true` | `false` → `security.javascriptEnabled: false` |
 | 7.1 | `mongodb8_cis_fix_key_file_permissions: false` | key, TLS key and CA files → `0600`, owner mongod |
 | 7.2 | `mongodb8_cis_fix_db_path_permissions: false` | dbPath → `0770`, owner mongod |
 
-The other Manual rules (1.1, 3.2–3.5, 4.5) need a person; hand fixes are in
+The other Manual rules (1.1, 3.2, 3.3, 4.5) need a person; hand fixes are in
 [`docs/manual-remediation.md`](docs/manual-remediation.md), and why they aren't automated in
 [`docs/automation-decisions.md`](docs/automation-decisions.md). How to prove a host is compliant:
 [`docs/compliance-test.md`](docs/compliance-test.md).
@@ -120,6 +122,7 @@ optional extra; `files/selinux/` holds MongoDB's policy sources (GPL-2.0-or-late
 - Only MongoDB 8.0 is supported; prelim stops on any other installed or requested version.
 - What each section and each rule's variables do: [`docs/sections.md`](docs/sections.md); how `mongod.conf` is read and
   changed: [`docs/reading-config.md`](docs/reading-config.md).
+- One-page overview of all 23 rules (why + what the role does): [`docs/summary.md`](docs/summary.md).
 - Design decisions, platform facts and test evidence: [`docs/`](docs/).
 
 ## License

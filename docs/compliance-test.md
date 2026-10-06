@@ -5,12 +5,15 @@ procedure of every CIS MongoDB 8 Benchmark v2.0.0 recommendation, checked **by h
 own output. Same format as the rebuild branch's `docs/compliance-test.md`, so the two implementations can be compared
 rule by rule.
 
+> **Filled-in record for the lab** (runs, screenshots per section, results per host): `mongodb8-cis-test/docs/compliance-test.md`.
+> This page is the procedure and the reasoning; the test project holds the evidence.
+
 | Item | Value (fill in) |
 |------|-----------------|
 | Hosts / OS | `rhel8-mongo`, `rhel9-mongo`, `rhel10-mongo` / `cat /etc/redhat-release` → |
 | MongoDB | `mongod --version` → |
 | Role | branch `main`, commit → (`git log --oneline -1` in the installed role) |
-| Profile | `mongodb8-cis-test/profiles/c3-full-benchmark.yml` (Level 1 + 2, risky rules on, site decisions) |
+| Settings | `mongodb8-cis-test/sysconfig/group_vars/mongodb/main.yml`: site values + Level 1/2 always; the FULL BENCHMARK block (risky rules, site decisions) commented for S2, uncommented for S4; TLS files from `lab_tls_*` |
 | Date / tester | |
 
 ## How `main` differs from the rebuild (what to expect)
@@ -50,10 +53,11 @@ Fresh RHEL 8, 9 and 10 snapshots (no MongoDB). In `mongodb8-cis-test`, point the
 # requirements.yml: version: main   (back to mongodb8-cis-rebuild for the rebuild test)
 ansible-galaxy install -r requirements.yml -p roles --force                                   # S0 role = main
 ansible mongodb -m setup -a 'filter=ansible_distribution*'                                     # S1 real OS per host
-ansible-playbook playbooks/site.yml -e @profiles/c2-level2-defaults.yml                        # S2 install + defaults
-ansible-playbook playbooks/prep-tls.yml                                                        # S3 TLS files
-ansible-playbook playbooks/site.yml -e @profiles/c3-full-benchmark.yml --force-handlers        # S4 full benchmark
-ansible-playbook playbooks/site.yml -e @profiles/c3-full-benchmark.yml                         # S5 rerun: changed=0
+ansible-playbook playbooks/site.yml                                                           # S2 install, safe defaults (FULL BENCHMARK block commented)
+ansible-playbook playbooks/prep-tls.yml                                                        # S3 TLS files (lab_tls_* → /etc/pki/mongodb)
+# uncomment the FULL BENCHMARK block in sysconfig/group_vars/mongodb/main.yml
+ansible-playbook playbooks/site.yml --force-handlers                                          # S4 full benchmark
+ansible-playbook playbooks/site.yml                                                           # S5 rerun: changed=0
 ```
 
 Add `--limit rhel9-mongo` (etc.) to run one host at a time. Then SSH to each host and run the checks below. Set this

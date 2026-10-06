@@ -1,7 +1,11 @@
-# Automation decisions — why 7 rules have no automated fix
+# Automation decisions — why 5 rules have no automated fix
 
 The role implements all 23 recommendations. 16 can change the host (10 Automated rules, 6 Manual rules with an
 opt-in site variable). **7 only report: 1.1, 2.3, 3.2, 3.3, 3.4, 3.5, 4.5.** This page is the weighing behind that:
+
+> **Revised 2026-10-06 (D30):** 3.4 and 3.5 now have opt-in name lists, so 18 can change the host and **5 only report:
+> 1.1, 2.3, 3.2, 3.3, 4.5.** Their sections below keep the original weighing and add the revision.
+
 for each rule, what an automated option **would have to look like**, what it would cost, what breaks if it's wrong,
 and why it was rejected. Summary: [design-decisions.md](design-decisions.md) D29. Hand fixes:
 [manual-remediation.md](manual-remediation.md). Quotes: CIS MongoDB 8 Benchmark v2.0.0.
@@ -162,6 +166,10 @@ mongodb8_cis_revoke_role_privileges:
 
 **Verdict:** report only (every custom role and its actions).
 
+**Revised 2026-10-06 (D30):** adopted in a simpler form: `mongodb8_cis_drop_custom_roles: ["shop.orderReader"]` drops
+whole roles the site names (CIS: *"eliminating unneeded roles"*). Answers change to 1 ✅ (the site names it), 2 ✅ (a
+name list), 3 partly (users lose that role; recreate by hand). Trimming single privileges stays manual.
+
 ---
 
 ## 3.5 Review Superuser/Admin Roles
@@ -185,6 +193,10 @@ mongodb8_cis_revoke_superuser_roles:       # accounts and which of the 8 roles t
 
 **Verdict:** report only. Unlike 3.1 (three named roles, *"drop them"*), 3.5 covers `root`, so a mistake is a lockout.
 **Revisit when:** needed; it would need a guard "never the 2.1 admin, never the last `root`".
+
+**Revised 2026-10-06 (D30):** adopted with that guard: `mongodb8_cis_revoke_superuser_roles: ["admin.ops"]` (names only,
+every 3.5 role the account holds); the run stops if the role's own admin (`admin.<mongodb8_cis_admin_user>`) is listed,
+so the server keeps its `root` admin.
 
 ---
 
@@ -225,8 +237,8 @@ restart. Existing data: dump → empty dbPath → restart → restore (a migrati
 | 2.3 | 2, 3, 4 | no cluster in scope |
 | 3.2 | 1, 2, 3 | per-account input; apps break, restrictions wiped |
 | 3.3 | 3, 4 | already passes; a repair can stop mongod starting |
-| 3.4 | 1, 2, 3, 4 | app team's judgment; nothing to fix by default |
-| 3.5 | 1, 3 | "Review"; can remove the last admin |
+| 3.4 | ~~1, 2, 3, 4~~ | **adopted 2026-10-06 as a drop list (D30)** |
+| 3.5 | ~~1, 3~~ | **adopted 2026-10-06 as a revoke list with an admin guard (D30)** |
 | 4.5 | 1, 2, 3 | data loss and key management |
 
 All seven are still CIS-correct: CIS marks 1.1, 3.x and 4.5 **Manual** (a person validates them), and 2.3 doesn't

@@ -13,7 +13,7 @@ Read this when you come back to `main` after testing the rebuild branch. The reb
 | Site variables for Manual rules (D20) | 3.1, 5.2, 6.2, 6.3, 7.1, 7.2 (**ported 2026-10-05**) | same six |
 | Test status | T1–T10 on the old KVM lab (RHEL 10 + a RHEL 9.8 VM named rhel8); new options **not VM-tested yet** | compliance test in progress (see its handoff) |
 
-Same layout, rule names, defaults, profiles and docs on both, so the test project works with either branch by changing
+Same layout, rule names, defaults and docs on both, so the test project works with either branch by changing
 one line (`version:` in `requirements.yml`).
 
 ## 2. What changed on `main` on 2026-10-05 (commit `da298cf`)
@@ -50,10 +50,11 @@ Then the same procedure as the rebuild, on a **fresh snapshot** per VM (`docs/co
 
 ```bash
 ansible <host> -m setup -a 'filter=ansible_distribution*'
-ansible-playbook playbooks/site.yml --limit <host> -e @profiles/c2-level2-defaults.yml | tee runs/main-<host>-c2.log
+ansible-playbook playbooks/site.yml --limit <host> | tee runs/main-<host>-c2.log   # FULL BENCHMARK block commented
 ansible-playbook playbooks/prep-tls.yml --limit <host>
-ansible-playbook playbooks/site.yml --limit <host> -e @profiles/c3-full-benchmark.yml --force-handlers | tee runs/main-<host>-c3.log
-ansible-playbook playbooks/site.yml --limit <host> -e @profiles/c3-full-benchmark.yml | tee runs/main-<host>-c3-rerun.log   # changed=0
+# uncomment the FULL BENCHMARK block in group_vars/mongodb/main.yml
+ansible-playbook playbooks/site.yml --limit <host> --force-handlers | tee runs/main-<host>-c3.log
+ansible-playbook playbooks/site.yml --limit <host> | tee runs/main-<host>-c3-rerun.log   # changed=0
 ```
 
 Extra checks for the new options on `main`:
@@ -61,6 +62,8 @@ Extra checks for the new options on `main`:
 | Option | How to test |
 |--------|-------------|
 | 3.1 revoke | `mongosh`: create `badadmin` with `userAdminAnyDatabase@admin` + `read@shop`; run → 3.1 REVIEW `admin.badadmin`; set `mongodb8_cis_revoke_admin_roles: ["admin.badadmin"]`; run → revoked, `read@shop` kept; rerun → skipped |
+| 3.4 drop | `mongosh`: `use shop; db.createRole({role: "orderReader", privileges: [{resource: {db: "shop", collection: "orders"}, actions: ["find"]}], roles: []})`; run → 3.4 REVIEW `shop.orderReader`; set `mongodb8_cis_drop_custom_roles: ["shop.orderReader"]`; run → dropped; rerun → `0 user-defined role(s)`, `changed=0` |
+| 3.5 revoke | create `ops` in admin with `clusterAdmin@admin` + `read@shop`; set `mongodb8_cis_revoke_superuser_roles: ["admin.ops"]`; run → `clusterAdmin` revoked, `read@shop` kept; then list `admin.frqadminDB` → run **stops** at the guard |
 | 5.2 filter | set `mongodb8_cis_audit_filter: '{ atype: { $in: [ "authenticate" ] } }'` → `auditLog.filter` written, one restart; rerun `changed=0` |
 | 6.2 drop-in | fresh install: limits already match → no drop-in. Set `mongodb8_cis_resource_limits.LimitNOFILE: 128000` → drop-in written, restart, `cat /proc/$(pidof mongod)/limits` shows 128000 |
 | 7.1 permissions | after 4.3: `chmod 644 /etc/pki/mongodb/ca.pem` → 7.1 FAIL; with the fix on → back to 0600 |
@@ -90,3 +93,22 @@ or pymongo (structured output, `mongodb_user` for 2.1)? Which branch becomes the
 - `compliance-test.md`: per-host columns (R8/R9/R10), S0 = select the role version in the test project.
 - Ready for the compliance test. Not yet VM-tested on `main`: the five ported options, RHEL 8 overall, FIPS (4.4) on RHEL 10.
 - Added `docs/sections.md` (every section + the `vars:` in each rule) and `docs/reading-config.md` (from the rebuild, + `| int`).
+
+## 7. Added 2026-10-06: 3.4 and 3.5 opt-in lists (D30, accepted by the user; not committed yet)
+
+- `tasks/section_3/cis_3.4.yml`: report names roles `<db>.<role>`; PATCH `dropRole` for roles in `mongodb8_cis_drop_custom_roles`.
+- `tasks/section_3/cis_3.5.yml`: report names accounts `<db>.<user>`; assert that the role's own admin is not listed;
+  PATCH `revokeRolesFromUser` (every 3.5 role the account holds) for accounts in `mongodb8_cis_revoke_superuser_roles`.
+- `defaults/main.yml`: both variables (`[]`). Docs: D20 table, D28/D29 marked "Revised by D30", D30, `automation-decisions.md`
+  (revisions), `manual-remediation.md`, `summary.md`, `README.md`, `cis-requirements.md`, `sections.md`, `code-walkthrough.md`.
+- Coverage now: 10 Automated PATCH + **8** Manual opt-in + **5** report only (1.1, 2.3, 3.2, 3.3, 4.5).
+- Lint + syntax-check clean; expressions and the guard tested with fake data. **Test on a real mongod** (rows in section 3).
+- Not ported to the rebuild branch.
+
+## 8. Test project change (2026-10-06)
+
+`mongodb8-cis-test`: **one settings file, no profiles** (`profiles/` removed). `sysconfig/group_vars/mongodb/main.yml`
+holds the site values, `lab_tls_*` and Level 1 + 2; the **FULL BENCHMARK** block at the end (risky rules + site
+decisions) is **commented** for the first install (S2) and **uncommented** after `prep-tls.yml` (S4). Comment it again
+before the next fresh VM. `prep-tls.yml` is configurable: `lab_tls_cert_src`, `lab_tls_key_src` (separate key → joined
+into one PEM), `lab_tls_ca_src`; it stops with a message if MongoDB isn't installed (T-M9).

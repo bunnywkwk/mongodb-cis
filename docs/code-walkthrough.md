@@ -159,8 +159,8 @@ only if you set the decision variable.
 | 3.1 | L1 | Users with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` (PASS if none), named `<db>.<user>`. Accounts listed in `mongodb8_cis_revoke_admin_roles` lose those roles (`revokeRolesFromUser`, D20) |
 | 3.2 | L1 | Authorization on/off and every user with their roles |
 | 3.3 | L1 | Who mongod runs as (unit `User=` and the real process owner). PASS if not root |
-| 3.4 | L1 | Every user-defined role, its actions and inherited roles |
-| 3.5 | L2 | Users holding superuser/admin roles (`root`, `clusterAdmin`, …) |
+| 3.4 | L1 | Every user-defined role (`<db>.<role>`), its actions and inherited roles. Roles listed in `mongodb8_cis_drop_custom_roles` are dropped (`dropRole`, D30) |
+| 3.5 | L2 | Users holding superuser/admin roles (`root`, `clusterAdmin`, …), named `<db>.<user>`. Accounts in `mongodb8_cis_revoke_superuser_roles` lose them; an assert stops the run if the role's own admin is listed (D30) |
 
 Each DB read is `mongodb_shell` with `changed_when: false` and `check_mode: false`: it only reads, so it also runs in `--check`.
 

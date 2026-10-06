@@ -20,8 +20,6 @@ are off by default but **are** automated: turn them on in `group_vars`.
 | 2.3 | Automated | reports N/A on a standalone | sharded clusters only; needs one keyFile/x509 on every member + rolling restart (out of scope: standalone only, see design-decisions.md Scope) | MongoDB docs: "Deploy Sharded Cluster with Keyfile Authentication" |
 | 3.2 | Manual | reports authorization + every user's roles | which roles each account needs is a people decision | [3.2](#32-role-based-access-control) |
 | 3.3 | Manual | reports who mongod runs as | RPM default already passes; fixing a root-run mongod means re-owning unknown files | [3.3](#33-non-privileged-service-account) |
-| 3.4 | Manual | reports custom roles + actions | only the app team knows which privilege is unneeded | [3.4](#34-each-role-grants-only-the-necessary-privileges) |
-| 3.5 | Manual | reports superuser/admin accounts | which admins are legitimate is a people decision | [3.5](#35-review-superuser-admin-roles) |
 | 4.5 | Manual | reports encryption at rest | only on an empty dbPath + key management (KMIP/keyfile) design | [4.5](#45-encryption-of-data-at-rest) |
 
 ## Section 3 — Authorization
@@ -31,8 +29,8 @@ are off by default but **are** automated: turn them on in `group_vars`.
 | 3.1 | accounts with `dbOwner` / `userAdmin` / `userAdminAnyDatabase` in admin | optional: `mongodb8_cis_revoke_admin_roles` | [3.1](#31-least-privilege-for-database-accounts) |
 | 3.2 | authorization state + every user's roles | no | [3.2](#32-role-based-access-control) |
 | 3.3 | who mongod runs as | no (RPM default passes) | [3.3](#33-non-privileged-service-account) |
-| 3.4 | every custom role with its actions | no | [3.4](#34-each-role-grants-only-the-necessary-privileges) |
-| 3.5 | users with superuser/admin roles | no | [3.5](#35-review-superuser-admin-roles) |
+| 3.4 | every custom role with its actions | optional: `mongodb8_cis_drop_custom_roles` (whole roles; trimming privileges stays by hand) | [3.4](#34-each-role-grants-only-the-necessary-privileges) |
+| 3.5 | users with superuser/admin roles | optional: `mongodb8_cis_revoke_superuser_roles` (never the role's own admin) | [3.5](#35-review-superuser-admin-roles) |
 
 ### 3.1 Least privilege for database accounts
 

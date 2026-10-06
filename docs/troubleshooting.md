@@ -188,7 +188,7 @@ rhel9-mongo                : ok=42   changed=5    unreachable=0    failed=1    s
 - **Side effect:** the play stopped, so the `Restart mongod` handler did not run. 2.1/2.2 had already written
   `authorization: enabled` and `enableLocalhostAuthBypass: false` to `/etc/mongod.conf`; mongod kept running with the old
   settings until the next restart. The next run's 4.3 change triggers that restart.
-- **Fix:** `ansible-playbook playbooks/prep-tls.yml --limit rhel9-mongo`, then rerun the C3 profile.
+- **Fix:** `ansible-playbook playbooks/prep-tls.yml --limit rhel9-mongo`, then rerun the full benchmark (`site.yml`, group_vars).
 - **Prevent:** follow the order in [compliance-test.md](compliance-test.md) (S3 before S4). Add `--force-handlers` to
   runs that change the config, so a later failure still restarts mongod with what was already written.
 
@@ -204,7 +204,7 @@ fatal: [rhel8-mongo]: FAILED! => {"changed": false, "gid": 0, "group": "root", "
 **Cause:** `prep-tls.yml` (test project) ran on fresh VMs before MongoDB was installed. The `mongod` user and group are
 created by the MongoDB RPM, so `group: mongod` can't be set yet. The directory was created as `root:root 0755`.
 
-**Fix:** run the install step first (`site.yml -e @profiles/c2-level2-defaults.yml`, `mongodb8_cis_install: true`),
+**Fix:** run the install step first (`site.yml` with the FULL BENCHMARK block commented, `mongodb8_cis_install: true`),
 check `ansible mongodb -m command -a 'id mongod'`, then rerun `prep-tls.yml`; it corrects the directory's group and mode.
 
 **Prevent:** follow the step order in [compliance-test.md](compliance-test.md): S2 install → S3 TLS files → S4 full benchmark.

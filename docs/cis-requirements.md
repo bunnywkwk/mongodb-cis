@@ -17,7 +17,7 @@ How to read a row:
 ## How to prove compliance
 
 Run the role, rerun it (`changed=0`), then check every rule on the host with its CIS Audit command:
-[compliance-test.md](compliance-test.md). How to pick a profile and set site values: [README](../README.md).
+[compliance-test.md](compliance-test.md). How to pick a level and set site values: [README](../README.md).
 
 ## How each row was derived from the PDF
 
@@ -109,8 +109,8 @@ Not implemented on purpose:
 | Recommendations in the benchmark | **23** | 13 Level 1, 10 Level 2 |
 | Automated, role fixes them (PATCH) | 10 | 2.1, 2.2, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 |
 | Automated, reported (doesn't apply to standalone) | 1 | 2.3 (sharded clusters) |
-| Manual, role reports | 6 | 1.1, 3.2–3.5, 4.5 (why: D29; hand fixes: [manual-remediation.md](manual-remediation.md)) |
-| Manual, report + optional site decision | 6 | 3.1, 5.2, 6.2, 6.3, 7.1, 7.2 |
+| Manual, role reports | 4 | 1.1, 3.2, 3.3, 4.5 (why: D29; hand fixes: [manual-remediation.md](manual-remediation.md)) |
+| Manual, report + optional site decision | 8 | 3.1, 3.4, 3.5, 5.2, 6.2, 6.3, 7.1, 7.2 |
 | Off by default (risky / not applicable) | 6 | 2.1, 2.2, 2.3, 4.3, 4.4, 6.1 |
 | **Not covered** | **0** | |
 
