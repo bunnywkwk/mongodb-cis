@@ -19,8 +19,8 @@
     - name: "5.2 | PATCH | Ensure that audit filters are configured properly | Set auditLog.filter"
       when:
         - mongodb8_cis_audit_filter | length > 0
-        - mongodb8_cis_conf['auditLog'] is defined # this defined in 5.1
+        - mongodb8_cis_conf['auditLog'] is defined   # auditing must be on (5.1)
       ansible.builtin.set_fact:
-        mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'auditLog': {'filter': mongodb8_cis_audit_filter }}, recursive=true) }}"
+        mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'auditLog': {'filter': mongodb8_cis_audit_filter}}, recursive=true) }}"
       tags:
         - patch

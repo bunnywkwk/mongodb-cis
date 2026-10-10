@@ -12,4 +12,3 @@
     - logging
   ansible.builtin.set_fact:
     mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'auditLog': mongodb8_cis_audit_log}) }}"
-    

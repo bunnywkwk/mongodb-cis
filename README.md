@@ -43,7 +43,7 @@ mongodb8_cis_rule_6_3: false
 mongodb8_cis_section7: false
 
 # Exceptions: CIS rules this organization does not apply (and why)
-mongodb8_cis_rule_4_4: false          # no FIPS mode on these servers
+mongodb8_cis_rule_4_4: false          # an old client still needs SCRAM-SHA-1
 mongodb8_cis_javascript_needed: true  # 6.3: our app uses mapReduce
 
 # Values the rules need
@@ -76,7 +76,7 @@ that list is your compliance exception list. A rule whose value you haven't set 
 | 2.2 | `enableLocalhostAuthBypass: false` | At least one user (2.1) | The localhost login without a user |
 | 2.3 | Cluster members: `clusterAuthMode: x509` + `net.tls.clusterFile` (N/A on a standalone) | TLS (4.3); optional `mongodb8_cis_cluster_file` | Members not changed in the same run |
 | 4.3 | `net.tls.mode: requireTLS` | 2 files from your CA: server certificate + key in one PEM, and the CA certificate (`mongodb8_cis_tls_certificate_key_src` / `_tls_ca_src`; the role copies them to `/etc/pki/mongodb/`) | Clients without TLS and a certificate signed by your CA |
-| 4.4 | `net.tls.FIPSMode: true` | TLS (4.3) and the OS in FIPS mode | SCRAM-SHA-1 and non-FIPS ciphers |
+| 4.4 | `net.tls.FIPSMode: true` | TLS (4.3) | SCRAM-SHA-1 and non-FIPS ciphers |
 | 6.1 | Non-default `net.port`; with SELinux enabled, labels it `mongod_port_t` | `mongodb8_cis_port` (1024–65535) | Every connection string using 27017; firewall rules |
 | 6.3 | `security.javascriptEnabled: false` | — (`mongodb8_cis_javascript_needed: true` keeps it) | Apps using `$where`, `mapReduce`, `$function` |
 

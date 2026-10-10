@@ -867,35 +867,28 @@ Imports section 4. 4.3 first: the other TLS rules need TLS on.
 ```
 
 ### `tasks/section_4/cis_4.4.yml`
-
 4.4 (L2, Automated): FIPS mode.
-- On by default, but only applied when TLS is on and the OS runs in FIPS mode (`ansible_facts['fips']`); otherwise `NOT APPLIED` with the reason. mongod does not start in FIPS mode on a non-FIPS OS.
+
+- Only when TLS is on (4.3): mongod refuses `FIPSMode` without TLS.
+- Lab evidence (compliance test 2026-10-06, screenshots 19, 25, 32): mongod logs "FIPS 140 mode activated" on RHEL 8, 9
+  and 10 with this setting; no OS-level FIPS switch was needed.
 
 ```yaml
 ---
+# mongod refuses net.tls options unless TLS is on (rule 4.3).
 - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled"
   when:
     - mongodb8_cis_rule_4_4
     - mongodb8_cis_level_2
+    - mongodb8_cis_tls_enabled
   tags:
     - level2
     - automated
     - patch
     - rule_4.4
     - tls
-  block:
-    # mongod refuses FIPSMode without TLS (4.3), and does not start unless the OS itself runs in FIPS mode.
-    - name: "4.4 | AUDIT | Ensure Federal Information Processing Standard (FIPS) is enabled | Report when not possible"
-      when: not mongodb8_cis_tls_enabled or not ansible_facts['fips'] | default(false)
-      ansible.builtin.debug:
-        msg: >-
-          4.4 NOT APPLIED: needs TLS (4.3: {{ mongodb8_cis_tls_enabled }}) and the OS in FIPS mode
-          ({{ ansible_facts['fips'] | default(false) }}; RHEL: fips-mode-setup --enable, then reboot).
-
-    - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled | Set net.tls.FIPSMode: true"
-      when: mongodb8_cis_tls_enabled and ansible_facts['fips'] | default(false)
-      ansible.builtin.set_fact:
-        mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'net': {'tls': {'FIPSMode': true}}}, recursive=true) }}"
+  ansible.builtin.set_fact:
+    mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'net': {'tls': {'FIPSMode': true}}}, recursive=true) }}"
 ```
 
 ### `tasks/section_4/cis_4.5.yml`

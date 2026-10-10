@@ -44,7 +44,6 @@
             cmd: semodule --list-modules=full
           register: discovered_selinux_modules
           changed_when: false
-          check_mode: false
 
         - name: "SELINUX | PATCH | Confine mongod with SELinux | Build and load the module"
           when: >-

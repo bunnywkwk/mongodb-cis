@@ -106,7 +106,7 @@ mongodb8_cis_tls_ca_src: ""                # certificate of the CA that signed i
 mongodb8_cis_shell_tls_certificate_key_src: ""
 
 # 4.4 FIPS mode
-# WARNING: needs TLS (4.3) and the OS in FIPS mode; turns off SCRAM-SHA-1 and non-FIPS ciphers
+# WARNING: needs TLS (4.3); turns off SCRAM-SHA-1 and non-FIPS ciphers
 mongodb8_cis_rule_4_4: true
 
 # 4.5 Report encryption at rest (enabling it is done by hand: docs/manual-remediation.md)

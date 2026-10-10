@@ -11,7 +11,7 @@
     - authentication
   block:
     - name: "2.1 | AUDIT | Ensure Authentication is configured | Report when the admin values are missing"
-      when: mongodb_cis_admin_user | length == 0 or mongodb8_cis_admin_password | length == 0
+      when: mongodb8_cis_admin_user | length == 0 or mongodb8_cis_admin_password | length == 0
       ansible.builtin.debug:
         msg: "2.1 NOT APPLIED: set mongodb8_cis_admin_user and mongodb8_cis_admin_password (the admin is created before login is turned on)."
 
@@ -23,6 +23,7 @@
       register: discovered_2_1_admin
       changed_when: false
 
+    # CIS remediation: create a user administrator, then enable authorization.
     - name: "2.1 | PATCH | Ensure Authentication is configured | Create the admin"
       when:
         - discovered_2_1_admin is not skipped

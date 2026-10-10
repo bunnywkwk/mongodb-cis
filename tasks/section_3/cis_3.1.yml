@@ -31,8 +31,8 @@
       when: item['_id'] in mongodb8_cis_revoke_admin_roles
       community.mongodb.mongodb_shell:
         eval: >-
-          db.getSiblingDB({{ item['db'] | to_json }}).revokeRolesFromUser({{ item['user'] | to_json }}
-          [{role: 'dbOwner', db: 'admin'}, {role: 'userAdmin', db: 'admin'}, role: 'userAdminAnyDatabase', db: 'admin'])
+          db.getSiblingDB({{ item['db'] | to_json }}).revokeRolesFromUser({{ item['user'] | to_json }},
+          [{role: 'dbOwner', db: 'admin'}, {role: 'userAdmin', db: 'admin'}, {role: 'userAdminAnyDatabase', db: 'admin'}])
       loop: "{{ discovered_3_1_users['transformed_output'] }}"
       loop_control:
         label: "{{ item['_id'] }}"

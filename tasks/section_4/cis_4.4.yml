@@ -1,24 +1,15 @@
 ---
+# mongod refuses net.tls options unless TLS is on (rule 4.3).
 - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled"
   when:
     - mongodb8_cis_rule_4_4
     - mongodb8_cis_level_2
+    - mongodb8_cis_tls_enabled
   tags:
     - level2
     - automated
     - patch
     - rule_4.4
     - tls
-  block:
-    # mongod refuses FIPSMode without TLS (4.3), and does not start unless the OS itself runs in FIPS mode.
-    - name: "4.4 | AUDIT | Ensure Federal Information Processing Standard (FIPS) is enabled | Report when not possible"
-      when: not mongodb8_cis_tls_enabled or not ansible_facts['fips'] | default(false)
-      ansible.builtin.debug:
-        msg: >-
-          4.4 NOT APPLIED: needs TLS (4.3: {{ mongodb8_cis_tls_enabled }}) and the OS in FIPS mode
-          ({{ ansible_facts['fips'] | default(false) }}; RHEL: fips-mode-setup --enable, then reboot).
-
-    - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled | Set net.tls.FIPSMode: true"
-      when: mongodb8_cis_tls_enabled and ansible_facts['fips'] | default(false)
-      ansible.builtin.set_fact:
-        mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'net': {'tls': {'FIPSMode': true}}}, recursive=true) }}"
+  ansible.builtin.set_fact:
+    mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'net': {'tls': {'FIPSMode': true}}}, recursive=true) }}"

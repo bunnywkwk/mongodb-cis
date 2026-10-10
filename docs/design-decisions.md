@@ -570,8 +570,8 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
   encryption key) stay empty: the rule reports `NOT APPLIED` and skips, never fails the run. Level 2 stays opt-in (D18).
 - **Why:** the user applies hardening this way ("CIS said it, so it's on; we turn it off only when it limits what we
   need") and wants one convention across roles.
-- **Safety kept:** 2.2 waits for a user; 2.3 and 4.3 wait for certificate files (`mongodb8_cis_tls_ready`); 4.4 waits for TLS and
-  an OS in FIPS mode (mongod would not start otherwise); 4.5 only on an empty dbPath.
+- **Safety kept:** 2.2 waits for a user; 2.3 and 4.3 wait for certificate files (`mongodb8_cis_tls_ready`); 4.4 waits for TLS (a first draft also required OS FIPS mode;
+  removed: the 2026-10-06 lab test shows mongod activating FIPS on RHEL 8/9/10 without it); 4.5 only on an empty dbPath.
 - **Tested:** lint, syntax, and the `mongodb8_cis_tls_ready` expression locally; not yet on a VM.
 
 ## D34. 4.5 back to report only (revises D31 for 4.5)

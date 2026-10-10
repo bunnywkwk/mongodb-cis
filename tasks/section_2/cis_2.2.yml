@@ -24,6 +24,6 @@
         msg: "2.2 NOT APPLIED: no database user exists yet. Set the 2.1 admin first."
 
     - name: "2.2 | PATCH | Ensure that MongoDB does not bypass authentication via the localhost exception | Set enableLocalhostAuthBypass: false"
-      when: discovered_2_2_users | int > 0
+      when: discovered_2_2_users['transformed_output'] | int > 0
       ansible.builtin.set_fact:
         mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'setParameter': {'enableLocalhostAuthBypass': false}}, recursive=true) }}"
