@@ -20,11 +20,11 @@
       when: not mongodb8_cis_tls_ready
       ansible.builtin.debug:
         msg: >-
-          4.3 NOT APPLIED: set mongodb8_cis_tls_certificate_key_src (server certificate + key) and
-          mongodb8_cis_tls_ca_src (CA certificate).
+          4.3 NOT APPLIED: set the certificate files (mongodb8_cis_tls_certificate_key_src, mongodb8_cis_tls_ca_src)
+          and where they go on the server (mongodb8_cis_tls_certificate_key_file, mongodb8_cis_tls_ca_file).
 
     - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Create the certificate folders"
-      when: mongodb8_cis_tls_ready and item['src'] | length > 0
+      when: mongodb8_cis_tls_ready and item['src'] | length > 0 and item['dest'] | length > 0
       ansible.builtin.file:
         path: "{{ item['dest'] | dirname }}"
         state: directory
@@ -37,7 +37,7 @@
 
     # mongod reads the server and CA files as its own user; a renewed certificate is copied and mongod restarted.
     - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Copy the certificate files"
-      when: mongodb8_cis_tls_ready and item['src'] | length > 0
+      when: mongodb8_cis_tls_ready and item['src'] | length > 0 and item['dest'] | length > 0
       ansible.builtin.copy:
         src: "{{ item['src'] }}"
         dest: "{{ item['dest'] }}"

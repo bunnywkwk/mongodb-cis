@@ -212,6 +212,10 @@ Column H ("exceptions") is where deviations from the benchmark text are recorded
 
 ## D17. SELinux policy for `mongod`: optional extra, off by default
 
+> **Removed 2026-10-10 (user):** the extra (`tasks/selinux.yml`, `files/selinux/`, `mongodb8_cis_selinux_policy`) is not
+> part of the role for now, to keep it to what CIS asks. 6.1 still labels a new port (`seport`), which mongod needs to
+> start under SELinux. The history below is kept.
+
 - **Decision:** `mongodb8_cis_selinux_policy: false`. When `true` and SELinux is enabled, `tasks/selinux.yml` (tag `selinux_policy`, no CIS ID):
   1. Installs `policycoreutils-python-utils`, plus `selinux-policy-devel` (which brings `make`, `checkpolicy`) on RHEL 9/10.
   2. **RHEL 9/10:** copies MongoDB's module sources (S9, pinned in `files/selinux/`) to `/usr/share/mongodb8_cis/selinux/`, builds `mongodb.pp` with `/usr/share/selinux/devel/Makefile` and loads it with `semodule --priority 200`, as the upstream `Makefile` does. It rebuilds only when the sources changed or no priority-200 `mongodb` module is loaded.
@@ -557,7 +561,7 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 - **Evidence:** CIS 4.3 remediation (`requireTLS`, `certificateKeyFile`, `CAFile`); MongoDB `net.tls.certificateKeyFile`
   holds certificate and key in one file on Linux (no separate key option).
 - **Revised 2026-10-10 (same day, user review):** the two path variables were redundant with `_src`: removed from
-  defaults. The server paths are fixed in `vars/main.yml` (`/etc/pki/mongodb/server.pem`, `ca.pem`); 4.3 applies when both
+  defaults. The server paths are user choices in defaults, empty by default (4.3 needs both sources and both destinations, else `NOT APPLIED`; second revision the same day), `mongodb8_cis_tls_certificate_key_file` / `_tls_ca_file`, defaulting to `/etc/pki/mongodb/` + the `_src` file's name (revised the same day: user wanted each path free; `vars/` can't be overridden from group_vars); 4.3 applies when both
   `_src` are set, otherwise reports `NOT APPLIED`. Files placed on the server another way are no longer an option.
 - **Not added:** `CRLFile`, `certificateKeyFilePassword` (not in CIS; add when a site needs them).
 - **Tested:** lint and syntax of the role rebuilt from `build-guide.md`; not yet on a VM.

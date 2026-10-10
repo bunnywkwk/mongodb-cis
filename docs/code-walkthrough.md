@@ -22,7 +22,6 @@ ansible-playbook site.yml
 ├─ tasks/section_1 … section_7   one folder per CIS section, one file per CIS rule
 │    each rule: is it switched on?  → compare  → fix only if wrong  (or just report)
 │
-├─ tasks/selinux.yml ......... optional extra, NOT a CIS rule (off by default)
 │
 └─ handlers/main.yml ......... at the end, only if something changed: restart mongod once, wait for it
 ```
@@ -96,7 +95,7 @@ and two decisions: `mongodb8_cis_javascript_needed` (6.3), `mongodb8_cis_fix_db_
 
 ## 4. `tasks/main.yml`: the table of contents
 
-Runs prelim (tag `always`), then sections 1–7 in CIS order behind their section switches, then the SELinux extra.
+Runs prelim (tag `always`), then sections 1–7 in CIS order behind their section switches, then post (writes mongod.conf).
 
 Sections 2 and 3 talk to the **database** (users, roles), so they sit in one `block` with **`module_defaults`**:
 the connection settings for `community.mongodb.mongodb_shell` (host, port, login, TLS) are written once there instead
@@ -201,19 +200,6 @@ Each DB read is `mongodb_shell` with `changed_when: false` and `check_mode: fals
 | 7.2 | L1 | DECISION | dbPath PASS/FAIL vs `0770`, owner = service user (RPM ships `0755` → FAIL). With `mongodb8_cis_fix_db_path_permissions: true` → fixes it (D20) |
 
 ---
-
-## 8. `tasks/selinux.yml`: optional extra, not CIS (off by default)
-
-Runs only with `mongodb8_cis_selinux_policy: true` and SELinux enabled (D17):
-
-| Step | Does |
-|------|------|
-| Install tools | `policycoreutils-python-utils` (+ `selinux-policy-devel` on RHEL 9/10) |
-| RHEL 9/10: build and load MongoDB's module | Copies `files/selinux/` to the host, builds `mongodb.pp`, loads it at priority 200, only if the sources changed or it isn't loaded yet. Removes old mongod socket files the new policy can't delete (T-M7) |
-| RHEL 8 | Message only: the base policy already confines mongod, and MongoDB's module doesn't build there |
-| Label non-default paths and port | `sefcontext` for a moved dbPath/log dir, `seport` for a non-default port |
-| `restorecon` | Applies the labels; counts as changed only if it printed something |
-| Report | The SELinux domain mongod runs as; expected `mongod_t` |
 
 ## 9. `handlers/main.yml`: one restart, then a check
 

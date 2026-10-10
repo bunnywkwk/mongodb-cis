@@ -6,6 +6,6 @@
 collections:
   - name: community.mongodb
     version: ">=1.8.0,<2.0.0"
-  # seport/sefcontext (6.1, SELinux extra). 11.x is the last line that supports ansible-core 2.16 (RHEL 8 env).
+  # seport (6.1). 11.x is the last line that supports ansible-core 2.16 (RHEL 8 env).
   - name: community.general
     version: ">=11.0.0,<12.0.0"

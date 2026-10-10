@@ -98,7 +98,7 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **4.3** (L1) | Automated, on | Copies the two files from `_src` to `/etc/pki/mongodb/server.pem` / `ca.pem` (owner mongod, 0600), then `net.tls.mode: requireTLS` + `certificateKeyFile` + `CAFile`; `NOT APPLIED` until both `_src` are set. **Runs first** in Section 4 (D25) | `mongodb8_cis_tls_certificate_key_src`, `mongodb8_cis_tls_ca_src` | ❌ TLS off |
+| **4.3** (L1) | Automated, on | Copies the two files from `_src` to `/etc/pki/mongodb/`, keeping their names (owner mongod, 0600), then `net.tls.mode: requireTLS` + `certificateKeyFile` + `CAFile`; `NOT APPLIED` until both `_src` are set. **Runs first** in Section 4 (D25) | `mongodb8_cis_tls_certificate_key_src`, `mongodb8_cis_tls_ca_src` | ❌ TLS off |
 | **4.1** (L2) | Automated | Adds `TLS1_0,TLS1_1` to `net.tls.disabledProtocols` (keeps others). TLS off → FAIL message, no write | — | ❌ FAIL (TLS off) |
 | **4.2** (L1) | Automated | Same key as 4.1 (CIS lists it at both levels) | — | ❌ FAIL (TLS off) |
 | **4.4** (L2) | Automated, **off** | `net.tls.FIPSMode: true` (needs TLS) | `mongodb8_cis_rule_4_4: true` | ❌ |
@@ -175,7 +175,7 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 | 6.3 | `when: not mongodb8_cis_javascript_needed` + `... \| default(true) is not false` | the site doesn't need JS **and** it isn't off yet (missing = MongoDB default `true`) |
 
 - On RHEL 8/9 mongod is confined (`mongod_t`) and may only bind `mongod_port_t` ports; on RHEL 10 it is unconfined
-  unless the SELinux extra is on ([test-results.md](test-results.md), D11, D17).
+  ([test-results.md](test-results.md), D11). 6.1 labels a new port `mongod_port_t` when SELinux is enabled.
 - The restart handler runs `daemon_reload` so systemd reads the 6.2 drop-in.
 - Server-side JavaScript (`$where`, `mapReduce`, `$function`, `$accumulator`) is deprecated in MongoDB 8.0.
 
@@ -202,10 +202,3 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 - CIS's commands use Ubuntu's user (`mongodb`) and path (`/var/lib/mongodb`); RHEL uses `mongod` and `/var/lib/mongo`.
 - 7.1 never creates a missing file; 7.2 changes the directory only (no `-R`). No restart needed.
 - 7.1 becomes real once 4.3 adds TLS files.
-
----
-
-## Optional extra (not CIS): SELinux policy
-
-`mongodb8_cis_selinux_policy: true` loads MongoDB's own SELinux module (RHEL 9/10) and labels non-default paths and the
-port. Main value: confines mongod on RHEL 10, where the OS policy doesn't (D17).

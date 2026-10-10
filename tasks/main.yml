@@ -55,13 +55,6 @@
   ansible.builtin.import_tasks:
     file: section_7/main.yml
 
-- name: Run the optional SELinux policy for mongod (not a CIS recommendation)
-  when: mongodb8_cis_selinux_policy
-  tags:
-    - selinux_policy
-  ansible.builtin.import_tasks:
-    file: selinux.yml
-
 - name: Write mongod.conf
   ansible.builtin.import_tasks:
     file: post.yml

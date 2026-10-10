@@ -97,13 +97,18 @@ mongodb8_cis_rule_4_2: true
 # WARNING: clients without TLS and a certificate from your CA can no longer connect
 mongodb8_cis_rule_4_3: true
 
-# 4.3 certificate files on the control node; the role copies them to /etc/pki/mongodb/ on the server
+# 4.3 certificate files on the control node; the role copies them to the server
 mongodb8_cis_tls_certificate_key_src: ""   # server certificate + private key in one PEM, e.g. files/pki/{{ inventory_hostname }}.pem
 mongodb8_cis_tls_ca_src: ""                # certificate of the CA that signed it, e.g. files/pki/ca.pem
+
+# 4.3 where they go on the server
+mongodb8_cis_tls_certificate_key_file: ""   # e.g. /etc/pki/mongodb/server.pem
+mongodb8_cis_tls_ca_file: ""                # e.g. /etc/pki/mongodb/ca.pem
 
 # 4.3 the role's own login certificate (cert + key, same CA), needed when the server certificate is not
 # allowed for client use (no clientAuth); empty = the role logs in with the server certificate
 mongodb8_cis_shell_tls_certificate_key_src: ""
+mongodb8_cis_shell_client_cert_path: ""   # where it goes on the server, e.g. /etc/pki/mongodb/role-client.pem
 
 # 4.4 FIPS mode
 # WARNING: needs TLS (4.3); turns off SCRAM-SHA-1 and non-FIPS ciphers
@@ -176,9 +181,3 @@ mongodb8_cis_rule_7_2: true
 
 # 7.2 set dbPath to 0770, owner mongod; false = report only
 mongodb8_cis_fix_db_path_permissions: true
-
-## Optional extra (not a CIS recommendation)
-
-# Confine mongod with MongoDB's SELinux module (RHEL 9/10) and label its paths and port
-# WARNING: mongod can then only use labelled paths and ports; test on a non-production host first
-mongodb8_cis_selinux_policy: false

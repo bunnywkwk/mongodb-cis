@@ -1,16 +1,17 @@
 # mongodb8_cis
 
-Ansible role that hardens a **MongoDB 8.0 Enterprise** server (`mongod`: standalone, or a replica set / shard / config server member) on **RHEL 8, 9 and 10** to the
+Ansible role that hardens **MongoDB 8.0 Enterprise** (`mongod`) on **RHEL 8, 9 and 10** to the
 **CIS MongoDB 8 Benchmark v2.0.0**, in the [ansible-lockdown](https://github.com/ansible-lockdown) style.
-Every task maps to one CIS recommendation. Manual recommendations only report; Automated ones fix drift and report
-what they changed. Platforms: RHEL and compatible (Rocky, Alma, Oracle with RHCK); tested on x86_64.
+Every task is one CIS recommendation. Automated rules change `mongod.conf` (written once, one restart);
+Manual rules report what a person should review, and some apply a decision you give them.
+Platforms: RHEL and compatible (Rocky, Alma, Oracle); standalone `mongod`, or a replica set / shard member (2.3).
 
 ## Requirements
 
-- ansible-core **2.16.x** on the control node: it is the last version that can manage RHEL 8 (Python 3.6), so one environment covers RHEL 8, 9 and 10. Setup: [`docs/control-node-setup.md`](docs/control-node-setup.md).
-- Collections on the control node: `ansible-galaxy collection install -r requirements.yml` (`community.mongodb` for `mongodb_shell`; `community.general` 11.x for SELinux labels, the last line that supports ansible-core 2.16).
-- On the database servers: `mongosh` comes with the `mongodb-enterprise` package. With SELinux enabled, 6.1 and the SELinux extra install `policycoreutils-python-utils`.
-- MongoDB Enterprise 8.0 installed, or `mongodb8_cis_install: true` to add the official Enterprise repo and install it.
+- ansible-core **2.16.x** on the control node: the last version that can manage RHEL 8 (Python 3.6).
+  Setup: [`docs/control-node-setup.md`](docs/control-node-setup.md).
+- Collections: `ansible-galaxy collection install -r requirements.yml` (`community.mongodb`, `community.general` 11.x).
+- MongoDB Enterprise 8.0 installed, or `mongodb8_cis_install: true` (adds MongoDB's Enterprise repo and installs it).
 
 ## Quick start
 
@@ -22,113 +23,97 @@ cat > site.yml <<'EOF'
   roles:
     - mongodb8_cis
 EOF
-ansible-playbook -i inventory site.yml --check --diff   # read-only preview
-ansible-playbook -i inventory site.yml                  # remediate; a second run reports changed=0
+ansible-playbook -i inventory site.yml      # a second run reports changed=0
 ```
 
-## Choosing what runs
+## What runs by default
 
-A rule runs when its **section**, its **level** and its **rule toggle** are all `true`. Every variable is documented in
-[`defaults/main.yml`](defaults/main.yml). Set switches in `group_vars`/`host_vars` as **unquoted** `true`/`false`:
-`"false"` in quotes is text, which stops the run on ansible-core 2.19+ and counts as *true* on 2.16. On the command
-line use JSON, `-e '{"mongodb8_cis_level_2": true}'`, not `-e mongodb8_cis_level_2=true`. Example `group_vars/mongodb.yml`:
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `mongodb8_cis_level_1` | `true` | CIS Level 1 |
+| `mongodb8_cis_level_2` | `false` | CIS Level 2: stricter. Set **both** to `true` for Level 2 |
+| `mongodb8_cis_section1` .. `mongodb8_cis_section7` | `true` | the 7 benchmark sections |
+| `mongodb8_cis_rule_<id>` | `true` | one switch per CIS rule, e.g. `mongodb8_cis_rule_6_1` for 6.1 |
+| values | `""` / `[]` | settings only your organization knows: the rule reports `NOT APPLIED` until set |
 
-```yaml
-# Level 2 profile (Level 2 extends Level 1)
-mongodb8_cis_level_1: true
-mongodb8_cis_level_2: true
+**The role applies the full benchmark, including the rules that change what clients can do.** Switch off what your
+organization does not accept; that list is also your compliance exception list. Switches are unquoted `true` / `false`.
+Every variable, with a one-line explanation: [`defaults/main.yml`](defaults/main.yml).
 
-# Skip one rule or a whole section
-mongodb8_cis_rule_6_3: false
-mongodb8_cis_section7: false
+## Values the rules need
 
-# Exceptions: CIS rules this organization does not apply (and why)
-mongodb8_cis_rule_4_4: false          # an old client still needs SCRAM-SHA-1
-mongodb8_cis_javascript_needed: true  # 6.3: our app uses mapReduce
+| Rule | Variable | Example |
+|------|----------|---------|
+| 2.1 | `mongodb8_cis_admin_user`, `mongodb8_cis_admin_password` | `dbadmin`, `"Change.Me.1"` (no spaces, quotes or backslashes) |
+| 4.3 | `mongodb8_cis_tls_certificate_key_src` | `files/pki/{{ inventory_hostname }}.pem`: server certificate + private key in one PEM |
+| 4.3 | `mongodb8_cis_tls_ca_src` | `files/pki/ca.pem`: certificate of the CA that signed it |
+| 4.3 | `mongodb8_cis_tls_certificate_key_file`, `mongodb8_cis_tls_ca_file` | `/etc/pki/mongodb/server.pem`, `/etc/pki/mongodb/ca.pem`: where they go on the server |
+| 6.1 | `mongodb8_cis_port` | `27100` (1024–65535, not 27017) |
 
-# Values the rules need
-mongodb8_cis_admin_user: siteAdmin
-mongodb8_cis_admin_password: "Change.Me.1"
-mongodb8_cis_tls_certificate_key_src: files/pki/{{ inventory_hostname }}.pem   # server cert + key, copied to the server
-mongodb8_cis_tls_ca_src: files/pki/ca.pem                                      # your CA certificate
-mongodb8_cis_port: 27100
-```
-
-## Audit only vs remediate
-
-| Goal | Command |
-|------|---------|
-| Preview every change, touch nothing | `--check --diff` |
-| Report rules only (Manual rules, reports), never change anything | `--tags audit --skip-tags patch` (a site-decision PATCH inside a report rule inherits its `audit` tag) |
-| One rule / skip one rule | `--tags rule_5.1` / `--skip-tags rule_6.1` |
-| By level | `--tags level1` or `--tags level1,level2` |
-
-Reports are printed as `<ID> PASS`, `FAIL`, `REVIEW` or `NOT APPLICABLE` with the value found.
+The 4.3 files are copied from the control node to the paths you choose, owner mongod, `0600`.
+A renewed certificate is a new source file: the next run copies it and restarts mongod.
+Optional: `mongodb8_cis_shell_tls_certificate_key_src` + `mongodb8_cis_shell_client_cert_path`, the role's own client certificate, when your server
+certificates are not allowed for client use; `mongodb8_cis_cluster_file` (2.3), a separate member certificate.
 
 ## Rules that change what clients can do (on by default)
 
-The role applies the full benchmark. Turn off what your organization can't accept with `mongodb8_cis_rule_<id>: false`;
-that list is your compliance exception list. A rule whose value you haven't set reports `NOT APPLIED` and skips.
+| Rule | What changes | What clients notice | Switch |
+|------|--------------|---------------------|--------|
+| 2.1 | creates the admin (role `root`), then login is required | clients without a user can't connect | `mongodb8_cis_rule_2_1` |
+| 2.2 | no localhost login without a user (only once a user exists) | the "no user yet" localhost login stops | `mongodb8_cis_rule_2_2` |
+| 2.3 | cluster members authenticate with x509 (N/A on a standalone; needs 4.3) | members not changed in the same run can't rejoin | `mongodb8_cis_rule_2_3` |
+| 4.3 | TLS required | clients without TLS and a certificate signed by your CA can't connect | `mongodb8_cis_rule_4_3` |
+| 4.4 | FIPS mode (needs 4.3) | SCRAM-SHA-1 and non-FIPS ciphers stop working | `mongodb8_cis_rule_4_4` |
+| 6.1 | non-default port (labelled for SELinux) | every connection string and firewall rule using 27017 | `mongodb8_cis_rule_6_1` |
+| 6.2 | CIS resource limits as a systemd drop-in | none (restart once) | `mongodb8_cis_fix_resource_limits` |
+| 6.3 | server-side JavaScript off | `$where`, `mapReduce`, `$function` fail | `mongodb8_cis_javascript_needed: true` keeps it |
+| 7.1 / 7.2 | key files `0600`, dbPath `0770`, owner mongod | none | `mongodb8_cis_fix_key_file_permissions` / `_db_path_permissions` |
 
-| Rule | Change | Needs | Breaks |
-|------|--------|-------|--------|
-| 2.1 | Creates the admin user (root@admin), then `security.authorization: enabled` | `mongodb8_cis_admin_user`, `_password` (no spaces, quotes or backslashes) | Clients without credentials |
-| 2.2 | `enableLocalhostAuthBypass: false` | At least one user (2.1) | The localhost login without a user |
-| 2.3 | Cluster members: `clusterAuthMode: x509` + `net.tls.clusterFile` (N/A on a standalone) | TLS (4.3); optional `mongodb8_cis_cluster_file` | Members not changed in the same run |
-| 4.3 | `net.tls.mode: requireTLS` | 2 files from your CA: server certificate + key in one PEM, and the CA certificate (`mongodb8_cis_tls_certificate_key_src` / `_tls_ca_src`; the role copies them to `/etc/pki/mongodb/`) | Clients without TLS and a certificate signed by your CA |
-| 4.4 | `net.tls.FIPSMode: true` | TLS (4.3) | SCRAM-SHA-1 and non-FIPS ciphers |
-| 6.1 | Non-default `net.port`; with SELinux enabled, labels it `mongod_port_t` | `mongodb8_cis_port` (1024–65535) | Every connection string using 27017; firewall rules |
-| 6.3 | `security.javascriptEnabled: false` | — (`mongodb8_cis_javascript_needed: true` keeps it) | Apps using `$where`, `mapReduce`, `$function` |
+Also changed, without client impact: 4.1/4.2 (TLS 1.0/1.1 off, when TLS is on), 5.1 (audit log, `syslog` by default,
+only when none is set), 5.3, 5.4. `mongod.conf` is written once with a backup, and mongod restarts once.
 
-Other rules that change `mongod.conf` and restart `mongod` once: 4.1/4.2 (only when TLS is on), 5.1 (adds `auditLog`,
-default `syslog`, only when missing), 5.3, 5.4. Every write keeps a backup of `mongod.conf`.
+## Manual rules: report, or apply your decision
 
-## Manual rules: report, or let the role apply your decision
+Empty = report only. The names come from the rule's own report.
 
-Manual rules only report by default. Where CIS gives one concrete fix, a variable lets the role apply your decision:
+| Rule | Variable | Example |
+|------|----------|---------|
+| 3.1 | `mongodb8_cis_revoke_admin_roles` | `["admin.badadmin"]`: removes `dbOwner` / `userAdmin` / `userAdminAnyDatabase` on admin |
+| 3.2 | `mongodb8_cis_users` | `[{user: appuser, db: shop, password: "App.Pass.1", roles: [{role: readWrite, db: shop}]}]`: creates missing accounts, adds missing roles, never removes |
+| 3.4 | `mongodb8_cis_drop_custom_roles` | `["shop.orderReader"]`: drops custom roles |
+| 3.5 | `mongodb8_cis_revoke_superuser_roles` | `["admin.ops"]`: removes superuser/admin roles; never the role's own admin |
+| 5.1 | `mongodb8_cis_audit_log` | `{destination: file, format: BSON, path: /var/log/mongodb/auditLog.bson}` (default `syslog`) |
+| 5.2 | `mongodb8_cis_audit_filter` | `'{ atype: { $in: [ "authenticate", "createUser", "dropUser" ] } }'` |
 
-| Rule | Variable (default = report only) | When set |
-|------|----------------------------------|----------|
-| 3.1 | `mongodb8_cis_revoke_admin_roles: []` | revokes `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin from the listed accounts, e.g. `["admin.badadmin"]` |
-| 3.2 | `mongodb8_cis_users: []` | creates the accounts you list (if missing) and adds the roles they lack, e.g. `- {user: appuser, db: shop, password: "App.Pass.1", roles: [{role: readWrite, db: shop}]}`. Never removes a role; accounts not listed are not touched |
-| 3.4 | `mongodb8_cis_drop_custom_roles: []` | drops the custom roles you list, e.g. `["shop.orderReader"]` |
-| 3.5 | `mongodb8_cis_revoke_superuser_roles: []` | revokes every superuser/admin role from the listed accounts, e.g. `["admin.ops"]`; never the role's own admin |
-| 5.2 | `mongodb8_cis_audit_filter: ""` | writes your `auditLog.filter` (auditing must be on, 5.1) |
-| 6.2 | `mongodb8_cis_fix_resource_limits: false` | writes `mongodb8_cis_resource_limits` (CIS values) as a systemd drop-in, restarts mongod |
-| 6.3 | `mongodb8_cis_javascript_needed: true` | `false` → `security.javascriptEnabled: false` |
-| 7.1 | `mongodb8_cis_fix_key_file_permissions: false` | key, TLS key and CA files → `0600`, owner mongod |
-| 7.2 | `mongodb8_cis_fix_db_path_permissions: false` | dbPath → `0770`, owner mongod |
+Report only (a person decides): 1.1 version and patches, 3.3 service account, 4.5 encryption at rest.
+Hand fixes: [`docs/manual-remediation.md`](docs/manual-remediation.md).
 
-The other Manual rules (1.1, 3.3, 4.5) need a person; hand fixes are in
-[`docs/manual-remediation.md`](docs/manual-remediation.md), and why they aren't automated in
-[`docs/automation-decisions.md`](docs/automation-decisions.md). How to prove a host is compliant:
-[`docs/compliance-test.md`](docs/compliance-test.md).
+## Run one rule, skip one rule
 
-## Optional extra: SELinux confinement (not a CIS recommendation)
+| Goal | Command |
+|------|---------|
+| Only some rules | `--tags rule_4.3` or `--tags level1` |
+| Skip a rule this run | `--skip-tags rule_6.1` (to skip it for good, use its switch) |
+| Reports only, change nothing | `--tags audit --skip-tags patch` |
 
-`mongodb8_cis_selinux_policy: true` (tag `selinux_policy`) confines `mongod` with MongoDB's own policy module, following
-MongoDB's install docs:
+Reports are printed as `<ID> PASS`, `FAIL`, `REVIEW`, `NOT APPLICABLE` or `NOT APPLIED` with the value found.
 
-- RHEL 9/10: builds MongoDB's module on the host (installs `selinux-policy-devel`, `make`, `checkpolicy`) and loads it.
-- RHEL 8: the base policy already confines `mongod` (`mongod_t`); MongoDB's module does not build there, so only labels are added.
-- All: labels a non-default `dbPath`, log directory and port, restores file labels, restarts `mongod` when something changed.
+## Check the result
 
-A confined `mongod` can only use labelled paths and ports. Try it on a non-production host first.
+```bash
+cat /etc/mongod.conf                                        # what the role wrote
+mongosh --port 27100 --tls --tlsCAFile /etc/pki/mongodb/ca.pem \
+  --tlsCertificateKeyFile /etc/pki/mongodb/<host>.pem -u dbadmin --authenticationDatabase admin \
+  --eval 'db.adminCommand({getCmdLineOpts: 1}).parsed'      # what mongod runs with
+```
+
+How to prove a host is compliant, rule by rule: [`docs/compliance-test.md`](docs/compliance-test.md).
 
 ## Layout
 
-`tasks/section_<N>/main.yml` imports one file per rule, `cis_<N>.<M>.yml` (Lockdown layout). `tasks/selinux.yml` is the
-optional extra; `files/selinux/` holds MongoDB's policy sources (GPL-2.0-or-later, from github.com/mongodb/mongodb-selinux).
-
-## Notes
-
-- With authorization on, the role logs in as `mongodb8_cis_admin_user` for its Section 2/3 reads. The password is
-  briefly visible in the server's process list while `mongosh` runs.
-- Only MongoDB 8.0 is supported; prelim stops on any other installed or requested version.
-- What each section and each rule's variables do: [`docs/sections.md`](docs/sections.md); how `mongod.conf` is read and
-  changed: [`docs/reading-config.md`](docs/reading-config.md).
-- One-page overview of all 23 rules (why + what the role does): [`docs/summary.md`](docs/summary.md).
-- Design decisions, platform facts and test evidence: [`docs/`](docs/).
+`tasks/main.yml` → `prelim.yml` (checks, opt-in `install.yml`, reads `mongod.conf`) → `section_1..7/` (one file per CIS
+rule; config rules add their setting to one fact) → `post.yml` (writes `mongod.conf` once). Design decisions, platform
+facts and test evidence: [`docs/`](docs/).
 
 ## License
 
