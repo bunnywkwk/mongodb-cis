@@ -14,19 +14,19 @@ variable) · 📋 REPORT (a person decides) · ➖ not applicable on a standalon
 | **2** | | | **Authentication** | | | | |
 | 2.1 | 1 | A | Authentication is configured | Without authentication anyone can reach the data and actions can't be traced to a user | 🔧 creates the admin (`root@admin`), then `security.authorization: enabled` | ⚠️ | `mongodb8_cis_rule_2_1`, `_admin_user`, `_admin_password` |
 | 2.2 | 1 | A | No auth bypass via the localhost exception | The exception lets a local connection in without a username/password | 🔧 checks a user exists, then `enableLocalhostAuthBypass: false` | ⚠️ | `mongodb8_cis_rule_2_2` |
-| 2.3 | 2 | A | Authentication in the sharded cluster | Cluster members must prove who they are (key or certificate) | ➖ reports N/A on a standalone | off | `mongodb8_cis_rule_2_3` |
+| 2.3 | 2 | A | Authentication in the sharded cluster | Cluster members must prove who they are (key or certificate) | ➖ N/A on a standalone; 🔧 on cluster members: x509 member authentication | ⚠️ off | `mongodb8_cis_rule_2_3` |
 | **3** | | | **Authorization** | | | | |
 | 3.1 | 1 | M | Least privilege for database accounts | Roles that can grant any privilege belong only to administrators | 🔧? lists accounts with `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin; revokes them from accounts you list | ✅ report | `mongodb8_cis_revoke_admin_roles: ["admin.<user>"]` |
-| 3.2 | 1 | M | Role-based access control enabled and configured | Access is controlled through roles, not individual grants | 📋 shows authorization state + every user's roles | ✅ | — ([manual-remediation.md](manual-remediation.md)) |
+| 3.2 | 1 | M | Role-based access control enabled and configured | Access is controlled through roles, not individual grants | 🔧? shows authorization state + every user's roles; `mongodb8_cis_users` creates accounts and adds missing roles | ✅ | `mongodb8_cis_users` |
 | 3.3 | 1 | M | Non-privileged, dedicated service account | A non-root account limits what a compromised database can reach on the OS | 📋 PASS if mongod doesn't run as root (RPM default: `mongod`) | ✅ | — |
 | 3.4 | 1 | M | Each role is needed and grants only necessary privileges | Roles and privileges pile up over time and are no longer needed | 🔧? lists every custom role and its actions; drops the roles you list | ✅ report | `mongodb8_cis_drop_custom_roles: ["<db>.<role>"]` |
 | 3.5 | 2 | M | Review superuser/admin roles | Fewer admin accounts, less chance of unwanted privileged access | 🔧? lists users with `root`, `*AnyDatabase`, `clusterAdmin`, …; revokes them from accounts you list (never the role's own admin) | ✅ report | `mongodb8_cis_revoke_superuser_roles: ["<db>.<user>"]` |
 | **4** | | | **Data Encryption** (4.3 runs first: mongod refuses TLS options without TLS, D25) | | | | |
 | 4.1 | 2 | A | Legacy TLS protocols disabled | TLS 1.0 is banned by PCI DSS; newer versions are stronger | 🔧 adds `TLS1_0,TLS1_1` to `disabledProtocols` (needs TLS on) | ✅ | — |
 | 4.2 | 1 | A | Weak protocols disabled | TLS 1.0 is open to BEAST; TLS 1.1 has no authenticated encryption | 🔧 same setting as 4.1 (CIS lists it twice) | ✅ | — |
-| 4.3 | 1 | A | Encryption of data in transit (TLS) | Stops sniffing of cleartext traffic and man-in-the-middle attacks | 🔧 checks the PEM files exist, then `net.tls.mode: requireTLS` + key + CA | ⚠️ | `mongodb8_cis_rule_4_3`, `_tls_certificate_key_file`, `_tls_ca_file` |
+| 4.3 | 1 | A | Encryption of data in transit (TLS) | Stops sniffing of cleartext traffic and man-in-the-middle attacks | 🔧 copies the server cert + key and the CA cert to `/etc/pki/mongodb/`, then `net.tls.mode: requireTLS` | ✅ (NOT APPLIED until the files are given) | `mongodb8_cis_rule_4_3`, `_tls_certificate_key_src`, `_tls_ca_src` |
 | 4.4 | 2 | A | FIPS is enabled | FIPS is the standard for how data is encrypted | 🔧 `net.tls.FIPSMode: true` (needs TLS) | ⚠️ | `mongodb8_cis_rule_4_4` |
-| 4.5 | 2 | M | Encryption of data at rest | Stolen disks or backups can't be read without the master key | 📋 shows encryption + key management; never enables it ([why](manual-remediation.md#45-encryption-of-data-at-rest)) | ✅ | — |
+| 4.5 | 2 | M | Encryption of data at rest | Stolen disks or backups can't be read without the master key | 📋 shows encryption + key management; enabling it is done by hand ([why](manual-remediation.md#45-encryption-of-data-at-rest)) | ✅ | — |
 | **5** | | | **Audit Logging** | | | | |
 | 5.1 | 1 | A | System activity is audited | Logs are needed to troubleshoot and to investigate incidents | 🔧 adds `auditLog` if missing (syslog); never changes an existing one | ✅ | `mongodb8_cis_audit_log: {destination: syslog}` |
 | 5.2 | 2 | M | Audit filters configured properly | The audit trail must record what the organisation needs to trace incidents | 🔧? shows the filter (none = everything); writes yours | ✅ report | `mongodb8_cis_audit_filter: '<filter>'` |
@@ -45,10 +45,9 @@ variable) · 📋 REPORT (a person decides) · ➖ not applicable on a standalon
 | | Count | Rules |
 |---|---|---|
 | Recommendations | 23 | Level 1: 13 · Level 2: 10 |
-| 🔧 Role fixes (Automated) | 10 | 2.1, 2.2, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 (5 of them ⚠️ off by default) |
-| 🔧? Fixes on your decision (Manual) | 8 | 3.1, 3.4, 3.5, 5.2, 6.2, 6.3, 7.1, 7.2 |
-| 📋 Report only (a person decides) | 4 | 1.1, 3.2, 3.3, 4.5 ([automation-decisions.md](automation-decisions.md)) |
-| ➖ Not applicable (standalone) | 1 | 2.3 |
+| 🔧 Role fixes (Automated) | 11 | 2.1, 2.2, 2.3, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 (6 of them ⚠️ off by default; 2.3 N/A on a standalone) |
+| 🔧? Fixes on your decision | 9 | 3.1, 3.2, 3.4, 3.5, 5.2, 6.2, 6.3, 7.1, 7.2 (D31) |
+| 📋 Report only (a person decides) | 3 | 1.1, 3.3, 4.5 ([automation-decisions.md](automation-decisions.md)) |
 
 **Fully compliant run:** Level 2 on, the ⚠️ rules on with their values, the 🔧? variables set, and the 📋 items reviewed
 by a person. Proof: [compliance-test.md](compliance-test.md). Example settings: `sysconfig/group_vars/mongodb.yml` in the

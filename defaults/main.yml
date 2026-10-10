@@ -1,127 +1,184 @@
 ---
-# =============================================================================
-# mongodb8_cis — user-facing settings (CIS MongoDB 8 Benchmark v2.0.0)
-# Override in group_vars/host_vars; never edit tasks. Write true/false unquoted.
-# Each rule: its toggle, then the settings it uses (↳). Empty = not set / report only.
-# =============================================================================
+# CIS MongoDB 8 Benchmark v2.0.0 for MongoDB Enterprise 8.0 on RHEL 8/9/10. Override any of these in group_vars.
 
-# --- Install -----------------------------------------------------------------
-mongodb8_cis_install: false             # true = add the MongoDB Enterprise repo and install it when missing
-mongodb8_cis_version: "8.0"             # release series; only "8.0" is accepted (CIS MongoDB 8)
+## Install
 
-# --- CIS levels (Level 2 = set both true) ------------------------------------
+# Add the MongoDB Enterprise repo and install MongoDB; false = harden an existing install only
+mongodb8_cis_install: false
+
+# Release series; only "8.0" (CIS MongoDB 8)
+mongodb8_cis_version: "8.0"
+
+## Profiles
+
 mongodb8_cis_level_1: true
+
+# Level 2 is stricter; keep level 1 on as well
 mongodb8_cis_level_2: false
 
-# --- Sections ----------------------------------------------------------------
-mongodb8_cis_section1: true             # Installation and Patching
-mongodb8_cis_section2: true             # Authentication
-mongodb8_cis_section3: true             # Authorization
-mongodb8_cis_section4: true             # Data Encryption
-mongodb8_cis_section5: true             # Audit Logging
-mongodb8_cis_section6: true             # Operating System Hardening
-mongodb8_cis_section7: true             # File Permissions
+## Sections
 
-# --- Rules -------------------------------------------------------------------
-# Off by default (can lock users out or break clients): 2.1, 2.2, 4.3, 4.4, 6.1. Turn on when their values are ready.
+mongodb8_cis_section1: true   # Installation and Patching
+mongodb8_cis_section2: true   # Authentication
+mongodb8_cis_section3: true   # Authorization
+mongodb8_cis_section4: true   # Data Encryption
+mongodb8_cis_section5: true   # Audit Logging
+mongodb8_cis_section6: true   # Operating System Hardening
+mongodb8_cis_section7: true   # File Permissions
 
-# Section 1 - Installation and Patching
-# 1.1 (L1, Manual) Ensure the appropriate MongoDB software version/patches are installed
+## Rules
+# Every CIS rule is on. Set one to false when your organization can't accept what it does (WARNING lines);
+# that list is your compliance exception list. A rule that needs a value you haven't set reports NOT APPLIED and skips.
+
+## Section 1: Installation and Patching
+
+# 1.1 Report the installed version (upgrades are a change-window task)
 mongodb8_cis_rule_1_1: true
 
-# Section 2 - Authentication
-# 2.1 (L1, Automated) Ensure Authentication is configured
-# WARNING: turns on login; clients without a user can no longer connect.
-mongodb8_cis_rule_2_1: false
-mongodb8_cis_admin_user: ""             # ↳ admin created first (role root), e.g. dbadmin; also used for the 2.x/3.x reads
-mongodb8_cis_admin_password: ""         # ↳ from Ansible Vault; no spaces, quotes or backslashes
-# 2.2 (L1, Automated) Ensure that MongoDB does not bypass authentication via the localhost exception
-# WARNING: removes the "no user yet" localhost login (the rule checks a user exists first).
-mongodb8_cis_rule_2_2: false
-# 2.3 (L2, Automated) Ensure authentication is enabled in the sharded cluster
-mongodb8_cis_rule_2_3: false            # sharded clusters only; this role targets standalone
+## Section 2: Authentication
 
-# Section 3 - Authorization
-# 3.1 (L1, Manual) Ensure least privilege for database accounts
+# 2.1 Turn on login (creates the admin first)
+# WARNING: clients without a user can no longer connect
+mongodb8_cis_rule_2_1: true
+
+# 2.1 admin account (role root), also used by the role for its database reads
+mongodb8_cis_admin_user: ""
+mongodb8_cis_admin_password: ""   # no spaces, quotes or backslashes
+
+# 2.2 No localhost login without a user (skipped until a user exists)
+mongodb8_cis_rule_2_2: true
+
+# 2.3 Cluster members authenticate with x509 certificates (replica set or sharded cluster; N/A on a standalone)
+# WARNING: needs TLS (4.3); run every member in the same play
+mongodb8_cis_rule_2_3: true
+
+# 2.3 member certificate on the server; empty = the 4.3 server certificate
+mongodb8_cis_cluster_file: ""
+
+## Section 3: Authorization
+
+# 3.1 Report accounts with dbOwner / userAdmin / userAdminAnyDatabase in admin
 mongodb8_cis_rule_3_1: true
-# WARNING: the listed accounts lose dbOwner/userAdmin/userAdminAnyDatabase in admin; check the 3.1 report first.
-mongodb8_cis_revoke_admin_roles: []     # ↳ accounts as the 3.1 report names them (<database>.<user>), e.g. ["admin.badadmin"]
-# 3.2 (L1, Manual) Ensure that role-based access control is enabled and configured appropriately
-mongodb8_cis_rule_3_2: true
-# 3.3 (L1, Manual) Ensure that MongoDB is run using a non-privileged, dedicated service account
-mongodb8_cis_rule_3_3: true
-# 3.4 (L1, Manual) Ensure that each role for each MongoDB database is needed and grants only the necessary privileges
-mongodb8_cis_rule_3_4: true
-# WARNING: a dropped role is removed from every user that held it; check the 3.4 report first.
-mongodb8_cis_drop_custom_roles: []      # ↳ custom roles as the 3.4 report names them (<database>.<role>), e.g. ["shop.orderReader"]
-# 3.5 (L2, Manual) Review Superuser/Admin Roles
-mongodb8_cis_rule_3_5: true
-# WARNING: the listed accounts lose every superuser/admin role 3.5 reports; never list the role's own admin (stopped).
-mongodb8_cis_revoke_superuser_roles: [] # ↳ accounts as the 3.5 report names them (<database>.<user>), e.g. ["admin.ops"]
 
-# Section 4 - Data Encryption
-# 4.1 (L2, Automated) Ensure legacy TLS protocols are disabled
+# 3.1 accounts to remove those roles from, as the report names them, e.g. ["admin.badadmin"]
+mongodb8_cis_revoke_admin_roles: []
+
+# 3.2 Report every account and its roles
+mongodb8_cis_rule_3_2: true
+
+# 3.2 accounts to create (if missing) and the roles they must have (missing roles are added, none removed)
+# e.g. - {user: appuser, db: shop, password: "Change.Me.1", roles: [{role: readWrite, db: shop}]}
+mongodb8_cis_users: []
+
+# 3.3 Report the account mongod runs as
+mongodb8_cis_rule_3_3: true
+
+# 3.4 Report custom roles and their privileges
+mongodb8_cis_rule_3_4: true
+
+# 3.4 custom roles to drop, as the report names them, e.g. ["shop.orderReader"]
+mongodb8_cis_drop_custom_roles: []
+
+# 3.5 Report accounts with superuser/admin roles
+mongodb8_cis_rule_3_5: true
+
+# 3.5 accounts to remove those roles from, e.g. ["admin.ops"]; never the role's own admin
+mongodb8_cis_revoke_superuser_roles: []
+
+## Section 4: Data Encryption
+
+# 4.1 No TLS 1.0 / 1.1
 mongodb8_cis_rule_4_1: true
-# 4.2 (L1, Automated) Ensure Weak Protocols are Disabled
+
+# 4.2 No weak ciphers
 mongodb8_cis_rule_4_2: true
-# 4.3 (L1, Automated) Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption)
-# WARNING: requireTLS rejects every client without TLS and a certificate signed by the CA.
-mongodb8_cis_rule_4_3: false
-mongodb8_cis_tls_certificate_key_file: ""        # ↳ server cert + key (PEM, already on the host), e.g. /etc/pki/mongodb/server.pem
-mongodb8_cis_tls_ca_file: ""                     # ↳ CA certificate, e.g. /etc/pki/mongodb/ca.pem
-mongodb8_cis_shell_tls_certificate_key_file: ""  # ↳ client cert for the role's own DB reads; empty = the server cert
-# 4.4 (L2, Automated) Ensure Federal Information Processing Standard (FIPS) is enabled
-# WARNING: needs TLS (4.3); disables SCRAM-SHA-1 and non-FIPS ciphers.
-mongodb8_cis_rule_4_4: false
-# 4.5 (L2, Manual) Ensure Encryption of Data at Rest
+
+# 4.3 Require TLS
+# WARNING: clients without TLS and a certificate from your CA can no longer connect
+mongodb8_cis_rule_4_3: true
+
+# 4.3 certificate files on the control node; the role copies them to /etc/pki/mongodb/ on the server
+mongodb8_cis_tls_certificate_key_src: ""   # server certificate + private key in one PEM, e.g. files/pki/{{ inventory_hostname }}.pem
+mongodb8_cis_tls_ca_src: ""                # certificate of the CA that signed it, e.g. files/pki/ca.pem
+
+# 4.3 the role's own login certificate (cert + key, same CA), needed when the server certificate is not
+# allowed for client use (no clientAuth); empty = the role logs in with the server certificate
+mongodb8_cis_shell_tls_certificate_key_src: ""
+
+# 4.4 FIPS mode
+# WARNING: needs TLS (4.3) and the OS in FIPS mode; turns off SCRAM-SHA-1 and non-FIPS ciphers
+mongodb8_cis_rule_4_4: true
+
+# 4.5 Report encryption at rest (enabling it is done by hand: docs/manual-remediation.md)
 mongodb8_cis_rule_4_5: true
 
-# Section 5 - Audit Logging
-# 5.1 (L1, Automated) Ensure that system activity is audited
-# WARNING: adds load and log volume; restarts mongod. An existing auditLog is never changed.
+## Section 5: Audit Logging
+
+# 5.1 Audit system activity (only when auditLog is missing)
 mongodb8_cis_rule_5_1: true
-mongodb8_cis_audit_log:                 # ↳ written as-is under auditLog: in mongod.conf
-  destination: syslog                   #   syslog | console | file (file: also format JSON|BSON and path)
-#   file example: {destination: file, format: BSON, path: /var/log/mongodb/auditLog.bson}
-# 5.2 (L2, Manual) Ensure that audit filters are configured properly
-# WARNING: a filter records less than the default (everything); agree it with the security team.
+
+# 5.1 auditLog settings; file example: {destination: file, format: BSON, path: /var/log/mongodb/auditLog.bson}
+mongodb8_cis_audit_log:
+  destination: syslog
+
+# 5.2 Report the audit filter
 mongodb8_cis_rule_5_2: true
-mongodb8_cis_audit_filter: ""           # ↳ e.g. '{ atype: { $in: [ "authenticate", "createUser", "dropUser" ] } }'
-#   change only the names in [ ]: authenticate, createUser, dropUser, updateUser, grantRolesToUser,
-#   revokeRolesFromUser, dropCollection, dropDatabase, shutdown. Empty = every event is audited.
-# 5.3 (L2, Automated) Ensure that logging captures as much information as possible
+
+# 5.2 filter to write; empty = audit everything
+# e.g. '{ atype: { $in: [ "authenticate", "createUser", "dropUser" ] } }'
+mongodb8_cis_audit_filter: ""
+
+# 5.3 Log as much as possible (quiet: false)
 mongodb8_cis_rule_5_3: true
-# 5.4 (L2, Automated) Ensure that new entries are appended to the end of the log file
+
+# 5.4 Append to the log file
 mongodb8_cis_rule_5_4: true
 
-# Section 6 - Operating System Hardening
-# 6.1 (L1, Automated) Ensure that MongoDB uses a non-default port
-# WARNING: every client and connection string must change to the new port.
-mongodb8_cis_rule_6_1: false
-mongodb8_cis_port: ""                   # ↳ 1024-65535, not 27017, e.g. 27117 (CIS: organisation defined; avoid 32768-60999, the ephemeral range)
-# 6.2 (L2, Manual) Ensure that operating system resource limits are set for MongoDB
+## Section 6: Operating System Hardening
+
+# 6.1 Non-default port
+# WARNING: every client and connection string must change
+mongodb8_cis_rule_6_1: true
+
+# 6.1 port, 1024-65535, not 27017, e.g. 27117
+mongodb8_cis_port: ""
+
+# 6.2 Report the resource limits
 mongodb8_cis_rule_6_2: true
-mongodb8_cis_fix_resource_limits: false  # ↳ true = write the limits below as a systemd drop-in for mongod (+ restart) when they differ
-mongodb8_cis_resource_limits:            # ↳ CIS values; change one to your site's need (e.g. LimitNOFILE: 128000)
-  LimitFSIZE: infinity                   #   f  file size
-  LimitCPU: infinity                     #   t  cpu time
-  LimitAS: infinity                      #   v  virtual memory
-  LimitNOFILE: 64000                     #   n  open files
-  LimitRSS: infinity                     #   m  memory size
-  LimitNPROC: 64000                      #   u  processes/threads
-# 6.3 (L2, Manual) Ensure that server-side scripting is disabled if not needed
-# WARNING: false blocks $where, mapReduce, $function and $accumulator for all apps.
+
+# 6.2 write the CIS limits below as a systemd drop-in (restarts mongod); false = report only
+mongodb8_cis_fix_resource_limits: true
+mongodb8_cis_resource_limits:
+  LimitFSIZE: infinity
+  LimitCPU: infinity
+  LimitAS: infinity
+  LimitNOFILE: 64000
+  LimitRSS: infinity
+  LimitNPROC: 64000
+
+# 6.3 Report server-side JavaScript
 mongodb8_cis_rule_6_3: true
-mongodb8_cis_javascript_needed: true    # ↳ false = your apps don't use server-side JS → the role disables it
 
-# Section 7 - File Permissions
-# 7.1 (L1, Manual) Ensure appropriate key file permissions are set
+# 6.3 server-side JavaScript off (CIS); set true if your apps use $where / mapReduce / $function
+# WARNING: those queries fail while it is off
+mongodb8_cis_javascript_needed: false
+
+## Section 7: File Permissions
+
+# 7.1 Report key file permissions
 mongodb8_cis_rule_7_1: true
-mongodb8_cis_fix_key_file_permissions: false  # ↳ true = set keyFile/TLS key/CA files to 0600, owner mongod (CIS: chmod 600)
-# 7.2 (L1, Manual) Ensure appropriate database file permissions are set.
-mongodb8_cis_rule_7_2: true
-mongodb8_cis_fix_db_path_permissions: false  # ↳ true = set dbPath to 0770, owner mongod (RPM ships 0755)
 
-# --- Optional extra, not a CIS recommendation --------------------------------
-# WARNING: a confined mongod can only use labelled paths and ports; test on a non-production host first.
-mongodb8_cis_selinux_policy: false      # true = confine mongod with MongoDB's SELinux module (RHEL 9/10) + labels
+# 7.1 set keyFile / TLS key / CA files to 0600, owner mongod; false = report only
+mongodb8_cis_fix_key_file_permissions: true
+
+# 7.2 Report database file permissions
+mongodb8_cis_rule_7_2: true
+
+# 7.2 set dbPath to 0770, owner mongod; false = report only
+mongodb8_cis_fix_db_path_permissions: true
+
+## Optional extra (not a CIS recommendation)
+
+# Confine mongod with MongoDB's SELinux module (RHEL 9/10) and label its paths and port
+# WARNING: mongod can then only use labelled paths and ports; test on a non-production host first
+mongodb8_cis_selinux_policy: false

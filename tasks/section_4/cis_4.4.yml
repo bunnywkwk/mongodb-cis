@@ -3,37 +3,22 @@
   when:
     - mongodb8_cis_rule_4_4
     - mongodb8_cis_level_2
-    - discovered_mongod_conf['net']['tls']['FIPSMode'] | default(false) is not true
   tags:
     - level2
     - automated
     - patch
     - rule_4.4
     - tls
-  vars:
-    mongodb8_cis_4_4_settings:
-      net:
-        tls:
-          FIPSMode: true
   block:
-    - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled | Report when TLS is off"
-      when: not mongodb8_cis_tls_enabled
+    # mongod refuses FIPSMode without TLS (4.3), and does not start unless the OS itself runs in FIPS mode.
+    - name: "4.4 | AUDIT | Ensure Federal Information Processing Standard (FIPS) is enabled | Report when not possible"
+      when: not mongodb8_cis_tls_enabled or not ansible_facts['fips'] | default(false)
       ansible.builtin.debug:
-        msg: "4.4 FAIL: net.tls.FIPSMode is not true. Not applied: TLS is not enabled (rule 4.3)."
+        msg: >-
+          4.4 NOT APPLIED: needs TLS (4.3: {{ mongodb8_cis_tls_enabled }}) and the OS in FIPS mode
+          ({{ ansible_facts['fips'] | default(false) }}; RHEL: fips-mode-setup --enable, then reboot).
 
     - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled | Set net.tls.FIPSMode: true"
-      when: mongodb8_cis_tls_enabled
-      block:
-        - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled | Write mongod.conf"
-          ansible.builtin.copy:
-            dest: "{{ mongodb8_cis_conf_path }}"
-            content: "{{ discovered_mongod_conf | combine(mongodb8_cis_4_4_settings, recursive=true) | to_nice_yaml(indent=2) }}"
-            owner: root
-            group: root
-            mode: "0644"
-            backup: true
-          notify: Restart mongod
-
-        - name: "4.4 | PATCH | Ensure Federal Information Processing Standard (FIPS) is enabled | Update the parsed config"
-          ansible.builtin.set_fact:
-            discovered_mongod_conf: "{{ discovered_mongod_conf | combine(mongodb8_cis_4_4_settings, recursive=true) }}"
+      when: mongodb8_cis_tls_enabled and ansible_facts['fips'] | default(false)
+      ansible.builtin.set_fact:
+        mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'net': {'tls': {'FIPSMode': true}}}, recursive=true) }}"

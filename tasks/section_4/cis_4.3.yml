@@ -3,7 +3,6 @@
   when:
     - mongodb8_cis_rule_4_3
     - mongodb8_cis_level_1
-    - discovered_mongod_conf['net']['tls']['mode'] | default('disabled') != 'requireTLS'
   tags:
     - level1
     - automated
@@ -11,44 +10,48 @@
     - rule_4.3
     - tls
   vars:
-    mongodb8_cis_4_3_key_file: >-
-      {{ mongodb8_cis_tls_certificate_key_file or discovered_mongod_conf['net']['tls']['certificateKeyFile'] | default('') }}
-    mongodb8_cis_4_3_ca_file: "{{ mongodb8_cis_tls_ca_file or discovered_mongod_conf['net']['tls']['CAFile'] | default('') }}"
+    # Files the site gives on the control node (src) and where they go on the server (dest).
+    mongodb8_cis_4_3_files:
+      - {src: "{{ mongodb8_cis_tls_certificate_key_src }}", dest: "{{ mongodb8_cis_tls_certificate_key_file }}", owner: "{{ mongodb8_cis_service_user }}"}
+      - {src: "{{ mongodb8_cis_tls_ca_src }}", dest: "{{ mongodb8_cis_tls_ca_file }}", owner: "{{ mongodb8_cis_service_user }}"}
+      - {src: "{{ mongodb8_cis_shell_tls_certificate_key_src }}", dest: "{{ mongodb8_cis_shell_client_cert_path }}", owner: root}
   block:
-    - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Get the PEM files"
-      ansible.builtin.stat:
-        path: "{{ item }}"
-        get_checksum: false
-      loop:
-        - "{{ mongodb8_cis_4_3_key_file }}"
-        - "{{ mongodb8_cis_4_3_ca_file }}"
-      register: discovered_4_3_files
+    - name: "4.3 | AUDIT | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Report when there are no certificate files"
+      when: not mongodb8_cis_tls_ready
+      ansible.builtin.debug:
+        msg: >-
+          4.3 NOT APPLIED: set mongodb8_cis_tls_certificate_key_src (server certificate + key) and
+          mongodb8_cis_tls_ca_src (CA certificate).
 
-    - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Check the PEM files"
-      ansible.builtin.assert:
-        that:
-          - mongodb8_cis_4_3_key_file | length > 0
-          - mongodb8_cis_4_3_ca_file | length > 0
-          - discovered_4_3_files['results'] | selectattr('stat.exists') | list | length == 2
-        fail_msg: >-
-          4.3: set mongodb8_cis_tls_certificate_key_file and mongodb8_cis_tls_ca_file to PEM files that exist on the host
-          (found '{{ mongodb8_cis_4_3_key_file }}', '{{ mongodb8_cis_4_3_ca_file }}').
-        quiet: true
-
-    - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Set net.tls mode requireTLS"
-      ansible.builtin.copy:
-        dest: "{{ mongodb8_cis_conf_path }}"
-        content: >-
-          {{ discovered_mongod_conf | combine({'net': {'tls': {'mode': 'requireTLS', 'certificateKeyFile': mongodb8_cis_4_3_key_file,
-          'CAFile': mongodb8_cis_4_3_ca_file}}}, recursive=true) | to_nice_yaml(indent=2) }}
+    - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Create the certificate folders"
+      when: mongodb8_cis_tls_ready and item['src'] | length > 0
+      ansible.builtin.file:
+        path: "{{ item['dest'] | dirname }}"
+        state: directory
         owner: root
         group: root
-        mode: "0644"
-        backup: true
+        mode: "0755"
+      loop: "{{ mongodb8_cis_4_3_files }}"
+      loop_control:
+        label: "{{ item['dest'] | dirname }}"
+
+    # mongod reads the server and CA files as its own user; a renewed certificate is copied and mongod restarted.
+    - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Copy the certificate files"
+      when: mongodb8_cis_tls_ready and item['src'] | length > 0
+      ansible.builtin.copy:
+        src: "{{ item['src'] }}"
+        dest: "{{ item['dest'] }}"
+        owner: "{{ item['owner'] }}"
+        group: "{{ item['owner'] }}"
+        mode: "0600"
+      loop: "{{ mongodb8_cis_4_3_files }}"
+      loop_control:
+        label: "{{ item['dest'] }}"
       notify: Restart mongod
 
-    - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Update the parsed config"
+    - name: "4.3 | PATCH | Ensure Encryption of Data in Transit TLS or SSL (Transport Encryption) | Set net.tls mode requireTLS"
+      when: mongodb8_cis_tls_ready
       ansible.builtin.set_fact:
-        discovered_mongod_conf: >-
-          {{ discovered_mongod_conf | combine({'net': {'tls': {'mode': 'requireTLS', 'certificateKeyFile': mongodb8_cis_4_3_key_file,
-          'CAFile': mongodb8_cis_4_3_ca_file}}}, recursive=true) }}
+        mongodb8_cis_conf: >-
+          {{ mongodb8_cis_conf | combine({'net': {'tls': {'mode': 'requireTLS',
+             'certificateKeyFile': mongodb8_cis_tls_certificate_key_file, 'CAFile': mongodb8_cis_tls_ca_file}}}, recursive=true) }}

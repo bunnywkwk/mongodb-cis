@@ -10,22 +10,9 @@
     - rule_3.3
     - authorization
   vars:
-    # An empty User= in the unit means systemd runs the service as root.
-    mongodb8_cis_3_3_unit_user: "{{ discovered_mongod_service['status']['User'] | default('', true) or 'root' }}"
-    mongodb8_cis_3_3_pid: "{{ discovered_mongod_service['status']['MainPID'] | default('0') | int }}"
-  block:
-    - name: "3.3 | AUDIT | Ensure that MongoDB is run using a non-privileged, dedicated service account | Get the mongod process owner"
-      when: mongodb8_cis_3_3_pid | int > 0
-      ansible.builtin.stat:
-        path: "/proc/{{ mongodb8_cis_3_3_pid }}"
-        get_checksum: false
-      register: discovered_3_3_proc
-
-    - name: "3.3 | AUDIT | Ensure that MongoDB is run using a non-privileged, dedicated service account | Report"
-      vars:
-        mongodb8_cis_3_3_owner: "{{ discovered_3_3_proc['stat']['pw_name'] | default(mongodb8_cis_3_3_unit_user) }}"
-      ansible.builtin.debug:
-        msg: >-
-          3.3 {{ 'PASS' if mongodb8_cis_3_3_owner != 'root' and mongodb8_cis_3_3_unit_user != 'root' else 'FAIL' }}:
-          unit User = {{ mongodb8_cis_3_3_unit_user }}, running mongod (PID {{ mongodb8_cis_3_3_pid }}) owned by {{ mongodb8_cis_3_3_owner }}.
-          File permissions for this account are checked by 7.1 and 7.2.
+    # No User= in the unit means systemd runs the service as root.
+    mongodb8_cis_3_3_user: "{{ discovered_mongod_service['status']['User'] | default('root', true) }}"
+  ansible.builtin.debug:
+    msg: >-
+      3.3 {{ 'PASS' if mongodb8_cis_3_3_user != 'root' else 'FAIL' }}: the mongod service runs as {{ mongodb8_cis_3_3_user }}
+      (systemd User=). File permissions for this account are checked by 7.1 and 7.2.

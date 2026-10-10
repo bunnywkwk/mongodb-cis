@@ -16,19 +16,44 @@
         transform: json
       register: discovered_3_2_users
       changed_when: false
-      check_mode: false
 
-    - name: "3.2 | AUDIT | Ensure that role-based access control is enabled and configured appropriately | Report authorization"
+    - name: "3.2 | AUDIT | Ensure that role-based access control is enabled and configured appropriately | Report"
       ansible.builtin.debug:
         msg: >-
-          3.2 REVIEW: security.authorization = {{ discovered_mongod_running_conf['security']['authorization'] | default('disabled') }}
-          (running config), {{ discovered_3_2_users['transformed_output'] | length }} user(s). Check each user's roles below.
+          3.2 REVIEW: authorization {{ discovered_mongod_conf['security']['authorization'] | default('disabled') }}.
+          Check each account has only the roles it needs: {{ discovered_3_2_users['transformed_output'] | to_json }}
 
-    - name: "3.2 | AUDIT | Ensure that role-based access control is enabled and configured appropriately | Report each user"
-      ansible.builtin.debug:
-        msg: >-
-          3.2 REVIEW: {{ item['user'] }}@{{ item['db'] }} roles:
-          {{ item['roles'] | map(attribute='role') | zip(item['roles'] | map(attribute='db')) | map('join', '@') | join(', ') or 'none' }}.
-      loop: "{{ discovered_3_2_users['transformed_output'] }}"
+    # CIS remediation: assign the appropriate users to each role. Creates the listed accounts that don't exist yet.
+    - name: "3.2 | PATCH | Ensure that role-based access control is enabled and configured appropriately | Create the listed accounts"
+      when: >-
+        discovered_3_2_users['transformed_output'] | selectattr('user', 'equalto', item['user'])
+        | selectattr('db', 'equalto', item['db']) | list | length == 0
+      community.mongodb.mongodb_shell:
+        eval: >-
+          db.getSiblingDB({{ item['db'] | to_json }}).createUser({user: {{ item['user'] | to_json }},
+          pwd: {{ item['password'] | to_json }}, roles: {{ item['roles'] | to_json }}})
+      loop: "{{ mongodb8_cis_users }}"
       loop_control:
         label: "{{ item['user'] }}@{{ item['db'] }}"
+      no_log: true
+      tags:
+        - patch
+
+    # Existing accounts get the listed roles they are missing. Nothing is removed and passwords are not changed.
+    - name: "3.2 | PATCH | Ensure that role-based access control is enabled and configured appropriately | Add missing roles"
+      vars:
+        mongodb8_cis_3_2_current_roles: >-
+          {{ discovered_3_2_users['transformed_output'] | selectattr('user', 'equalto', item['user'])
+             | selectattr('db', 'equalto', item['db']) | map(attribute='roles') | first | default(none) }}
+      when:
+        - mongodb8_cis_3_2_current_roles is not none
+        - item['roles'] | difference(mongodb8_cis_3_2_current_roles) | length > 0
+      community.mongodb.mongodb_shell:
+        eval: >-
+          db.getSiblingDB({{ item['db'] | to_json }}).grantRolesToUser({{ item['user'] | to_json }},
+          {{ item['roles'] | difference(mongodb8_cis_3_2_current_roles) | to_json }})
+      loop: "{{ mongodb8_cis_users }}"
+      loop_control:
+        label: "{{ item['user'] }}@{{ item['db'] }}"
+      tags:
+        - patch

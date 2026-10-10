@@ -54,14 +54,14 @@ Not implemented on purpose:
 |----|-----------|--------------------------|------|---------|------------------|
 | 2.1 | L1 Auto | `grep authorization /etc/mongod.conf` → `authorization: enabled`. Remediation: create the user administrator (CIS example: `role: "root"` on `admin`) **first**, then enable auth, then restart | PATCH: needs `admin_user`/`admin_password` → creates the admin user if missing → `security.authorization: enabled` | **off** | `grep -A2 '^security' /etc/mongod.conf`; `mongosh … --eval 'db.adminCommand({listDatabases:1})'` **without** login must fail |
 | 2.2 | L1 Auto | `grep enableLocalhostAuthBypass` → `false` (default `true`) | PATCH: refuses if no DB user exists (lockout guard) → `setParameter.enableLocalhostAuthBypass: false` | **off** | `grep -A2 '^setParameter' /etc/mongod.conf` |
-| 2.3 | L2 Auto | Sharded cluster: `clusterAuthMode: x509` (keyFile only for development) | REPORT: values, or "not applicable" on standalone | off | `grep -E 'clusterAuthMode\|keyFile' /etc/mongod.conf` |
+| 2.3 | L2 Auto | Sharded cluster: `clusterAuthMode: x509` (keyFile only for development) | REPORT: values, or "not applicable" on standalone; cluster members: PATCH x509 (D31) | off | `grep -E 'clusterAuthMode\|keyFile' /etc/mongod.conf` |
 
 ## Section 3: Authorization (all Manual: a person decides who needs what)
 
 | ID | Lvl / type | CIS checks → passes when | Role | Default | Verify on the VM |
 |----|-----------|--------------------------|------|---------|------------------|
 | 3.1 | L1 Manual | `db.system.users.find` with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` → none (CIS fix: drop them) | DECISION: lists them (PASS if none); revokes the 3 roles from accounts named in `mongodb8_cis_revoke_admin_roles` | on | `mongosh … --eval 'db.getSiblingDB("admin").system.users.find({},{user:1,roles:1})'` |
-| 3.2 | L1 Manual | `db.getUser()` / `getRole()` → each user has only appropriate roles | REPORT: authorization state + every user with roles | on | same as above |
+| 3.2 | L1 Manual | `db.getUser()` / `getRole()` → each user has only appropriate roles | REPORT: authorization state + every user with roles; optional `mongodb8_cis_users` (D31) | on | same as above |
 | 3.3 | L1 Manual | `ps -ef \| grep mongod` → runs as a dedicated non-root user | REPORT: unit `User=` and process owner, PASS if not root | on | `ps -o user= -C mongod` → `mongod` |
 | 3.4 | L1 Manual | `rolesInfo … showPrivileges` → only needed roles/privileges | REPORT: every user-defined role and its actions | on | `mongosh … --eval 'db.getSiblingDB("admin").getRoles({showPrivileges:true})'` |
 | 3.5 | L2 Manual | `rolesInfo` for superuser/admin roles → only people who need them hold them | REPORT: users with `root`, `dbOwner`, `userAdmin*`, `*AnyDatabase`, `clusterAdmin`, `hostManager` | on | same as 3.1. The 2.1 admin appears here, as expected: CIS's own 2.1 remediation creates it with `role: "root"` |
@@ -74,7 +74,7 @@ Not implemented on purpose:
 | 4.1 | L2 Auto | `disabledProtocols` → includes `TLS1_0,TLS1_1` | PATCH: adds them (keeps others). TLS off → prints FAIL | on (L2) | `grep disabledProtocols /etc/mongod.conf` |
 | 4.2 | L1 Auto | Same key as 4.1 (CIS lists it twice, L1 and L2) | PATCH: same as 4.1 | on | same as 4.1 |
 | 4.4 | L2 Auto | `net.tls.FIPSMode: true`; the log shows FIPS mode activated | PATCH: sets it (needs TLS on) | **off** | `grep FIPSMode /etc/mongod.conf`; `grep -i 'fips' /var/log/mongodb/mongod.log \| tail -2` |
-| 4.5 | L2 Manual | `security.enableEncryption: true` + key file / KMIP (CIS recommends KMIP) | REPORT: on/off + key management. Needs a key-management design, so the site does it ([manual-remediation.md](manual-remediation.md) 4.5) | on (L2) | `grep -A4 '^security' /etc/mongod.conf` |
+| 4.5 | L2 Manual | `security.enableEncryption: true` + key file / KMIP (CIS recommends KMIP) | REPORT: on/off + key management; enabling it by hand (D34) ([manual-remediation.md](manual-remediation.md) 4.5) | on (L2) | `grep -A4 '^security' /etc/mongod.conf` |
 
 ## Section 5: Audit Logging
 
@@ -107,11 +107,10 @@ Not implemented on purpose:
 | | Count | Rules |
 |---|---|---|
 | Recommendations in the benchmark | **23** | 13 Level 1, 10 Level 2 |
-| Automated, role fixes them (PATCH) | 10 | 2.1, 2.2, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 |
-| Automated, reported (doesn't apply to standalone) | 1 | 2.3 (sharded clusters) |
-| Manual, role reports | 4 | 1.1, 3.2, 3.3, 4.5 (why: D29; hand fixes: [manual-remediation.md](manual-remediation.md)) |
-| Manual, report + optional site decision | 8 | 3.1, 3.4, 3.5, 5.2, 6.2, 6.3, 7.1, 7.2 |
-| Off by default (risky / not applicable) | 6 | 2.1, 2.2, 2.3, 4.3, 4.4, 6.1 |
+| Automated, role fixes them (PATCH) | 11 | 2.1, 2.2, 2.3 (cluster members), 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 |
+| Manual, role reports | 3 | 1.1, 3.3, 4.5 (why: D29; hand fixes: [manual-remediation.md](manual-remediation.md)) |
+| Manual, report + optional site decision | 9 | 3.1, 3.2, 3.4, 3.5, 5.2, 6.2, 6.3, 7.1, 7.2 |
+| Off by default (risky) | 6 | 2.1, 2.2, 2.3, 4.3, 4.4, 6.1 |
 | **Not covered** | **0** | |
 
 **What the role does NOT do, on purpose** (and why it's still CIS-correct):

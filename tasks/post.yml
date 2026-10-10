@@ -1,0 +1,11 @@
+---
+# Every rule above added its settings to mongodb8_cis_conf; mongod.conf is written once, and mongod restarted once.
+- name: "POST | PATCH | Write mongod.conf"
+  ansible.builtin.copy:
+    dest: "{{ mongodb8_cis_conf_path }}"
+    content: "{{ mongodb8_cis_conf | to_nice_yaml(indent=2) }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart mongod

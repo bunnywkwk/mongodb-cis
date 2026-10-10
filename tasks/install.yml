@@ -4,7 +4,7 @@
     key: "{{ mongodb8_cis_repo_gpgkey }}"
     state: present
 
-- name: "INSTALL | PATCH | Add the official MongoDB Enterprise repository"
+- name: "INSTALL | PATCH | Add the MongoDB Enterprise repository"
   ansible.builtin.yum_repository:
     name: "{{ mongodb8_cis_repo_name }}"
     description: MongoDB Enterprise Repository
@@ -13,7 +13,7 @@
     gpgcheck: true
     enabled: true
 
-- name: "INSTALL | PATCH | Install MongoDB packages"
+- name: "INSTALL | PATCH | Install MongoDB"
   ansible.builtin.dnf:
     name: "{{ mongodb8_cis_package }}"
     state: present

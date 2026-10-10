@@ -5,6 +5,9 @@ opt-in site variable). **7 only report: 1.1, 2.3, 3.2, 3.3, 3.4, 3.5, 4.5.** Thi
 
 > **Revised 2026-10-06 (D30):** 3.4 and 3.5 now have opt-in name lists, so 18 can change the host and **5 only report:
 > 1.1, 2.3, 3.2, 3.3, 4.5.** Their sections below keep the original weighing and add the revision.
+>
+> **Revised 2026-10-10 (D31, user direction "widen the scope"):** 2.3 (cluster members), 3.2 (exact roles per account)
+> and 4.5 (new installs) now have opt-in variables. **2 only report: 1.1 and 3.3.**
 
 for each rule, what an automated option **would have to look like**, what it would cost, what breaks if it's wrong,
 and why it was rejected. Summary: [design-decisions.md](design-decisions.md) D29. Hand fixes:
@@ -82,6 +85,11 @@ across the cluster** (`serial: 1`, secondaries first), plus `mongos` instances.
 
 **Verdict:** reports `NOT APPLICABLE` on a standalone. **Revisit when:** the role supports replica sets/sharding.
 
+**Revised 2026-10-10 (D31):** adopted as x509 (CIS production method) behind `mongodb8_cis_rule_2_3` (off by default),
+applied only on a member (`sharding.clusterRole` or `replication.replSetName`); TLS comes from 4.3. Answers change:
+2 ✅ (a switch + optional member cert; run all members together), 4 ✅ for clusters. Rolling change without downtime
+stays by hand.
+
 ---
 
 ## 3.2 Ensure that role-based access control is enabled and configured appropriately
@@ -114,6 +122,10 @@ mongodb8_cis_db_users_exclusive: false     # true = drop users not in the list?
 
 **Verdict:** report only (every user and its roles). It would turn the hardening role into an account-management tool
 whose input only the site's people can write.
+
+**Revised 2026-10-10 (D31):** adopted for fresh servers: `mongodb8_cis_users` (user, db, password, roles) creates
+accounts that don't exist and adds roles an account is missing. It never removes a role, changes a password or drops a
+user. Answers change: 1 ✅ (the site names the roles), 2 ✅ (one flat list), 3 ✅ (only adds).
 
 ---
 
@@ -227,6 +239,11 @@ restart. Existing data: dump → empty dbPath → restart → restore (a migrati
 **Verdict:** report only; hand procedure with backups in [manual-remediation.md](manual-remediation.md) 4.5.
 **Revisit when:** a KMIP server is available (variant B, fresh installs only).
 
+**Revised 2026-10-10 (D31):** adopted for **new installs**: `mongodb8_cis_encryption` (KMIP or keyfile settings) is written in
+`section_4/cis_4.5.yml` (imported from `main.yml` before mongod's first start), only when dbPath has no data. Answers change: 1 ✅ (on an empty dbPath it is a
+setting), 3 ✅ (no data to lose; with data nothing is written). The key is never created by the role; its backup stays
+the site's job.
+
 ---
 
 ## Result
@@ -234,12 +251,12 @@ restart. Existing data: dump → empty dbPath → restart → restore (a migrati
 | Rule | Failed questions | Main reason |
 |------|------------------|-------------|
 | 1.1 | 2, 3 | upgrade = unplanned restart, no rollback |
-| 2.3 | 2, 3, 4 | no cluster in scope |
-| 3.2 | 1, 2, 3 | per-account input; apps break, restrictions wiped |
+| 2.3 | ~~2, 3, 4~~ | **adopted 2026-10-10: x509 on cluster members (D31)** |
+| 3.2 | ~~1, 2, 3~~ | **adopted 2026-10-10: create accounts, add missing roles (D31)** |
 | 3.3 | 3, 4 | already passes; a repair can stop mongod starting |
 | 3.4 | ~~1, 2, 3, 4~~ | **adopted 2026-10-06 as a drop list (D30)** |
 | 3.5 | ~~1, 3~~ | **adopted 2026-10-06 as a revoke list with an admin guard (D30)** |
-| 4.5 | 1, 2, 3 | data loss and key management |
+| 4.5 | 1, 2, 3 | data loss and key management (D31 opt-in reverted 2026-10-10, D34) |
 
 All seven are still CIS-correct: CIS marks 1.1, 3.x and 4.5 **Manual** (a person validates them), and 2.3 doesn't
 apply to a standalone. The role reports the facts each Audit asks for, so the reviewer has everything to decide.

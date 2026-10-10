@@ -88,7 +88,7 @@ Recurring words:
 | `files/selinux/` | MongoDB's own SELinux module sources (GPL-2.0) | Only for the optional extra (section 8 below) |
 
 **Switches that are off by default** because they can lock users out or break clients (D6):
-2.1 (login), 2.2 (no localhost bypass), 4.3 (require TLS), 4.4 (FIPS), 6.1 (new port), plus 2.3 (sharded clusters only).
+2.1 (login), 2.2 (no localhost bypass), 4.3 (require TLS), 4.4 (FIPS), 6.1 (new port).
 **Site values** CIS leaves to you: admin user/password (2.1), TLS files (4.3), port (6.1), audit destination (5.1),
 and two decisions: `mongodb8_cis_javascript_needed` (6.3), `mongodb8_cis_fix_db_path_permissions` (7.2) (D20).
 
@@ -150,14 +150,14 @@ only if you set the decision variable.
 |------|-----|------|--------------|------------|
 | 2.1 | L1 | PATCH, **off by default** | Needs admin user + password → checks if that user exists (`mongodb_shell`) → creates it (role `root`) → sets `security.authorization: enabled` | User is created **before** login is required, so nobody is locked out (D26). Password task has `no_log` |
 | 2.2 | L1 | PATCH, **off by default** | Counts database users → stops if there are none → sets `setParameter.enableLocalhostAuthBypass: false` | Without a user, turning off the localhost exception would lock everyone out (D26) |
-| 2.3 | L2 | REPORT, off by default | Shows `clusterAuthMode` / `keyFile`, or "not applicable" on standalone | Sharded clusters only |
+| 2.3 | L2 | PATCH, off by default | "not applicable" on a standalone; on a member: assert 4.3 is on, then `combine` `clusterAuthMode: x509` + `clusterFile` and copy (restart) | Cluster members only (D31) |
 
 ### Section 3: Authorization (`tasks/section_3/`), REPORT, read from the database (3.1 + optional revoke)
 
 | Rule | Lvl | Shows |
 |------|-----|-------|
 | 3.1 | L1 | Users with `dbOwner`, `userAdmin`, `userAdminAnyDatabase` in `admin` (PASS if none), named `<db>.<user>`. Accounts listed in `mongodb8_cis_revoke_admin_roles` lose those roles (`revokeRolesFromUser`, D20) |
-| 3.2 | L1 | Authorization on/off and every user with their roles |
+| 3.2 | L1 | Authorization on/off and every user with their roles; `createUser` for listed accounts not found, `grantRolesToUser` with the listed roles an account is missing (`difference`) (D31) |
 | 3.3 | L1 | Who mongod runs as (unit `User=` and the real process owner). PASS if not root |
 | 3.4 | L1 | Every user-defined role (`<db>.<role>`), its actions and inherited roles. Roles listed in `mongodb8_cis_drop_custom_roles` are dropped (`dropRole`, D30) |
 | 3.5 | L2 | Users holding superuser/admin roles (`root`, `clusterAdmin`, …), named `<db>.<user>`. Accounts in `mongodb8_cis_revoke_superuser_roles` lose them; an assert stops the run if the role's own admin is listed (D30) |
@@ -174,7 +174,7 @@ Each DB read is `mongodb_shell` with `changed_when: false` and `check_mode: fals
 | 4.1 | L2 | PATCH | Adds `TLS1_0,TLS1_1` to `net.tls.disabledProtocols` (keeps any others). If TLS is off: prints FAIL instead |
 | 4.2 | L1 | PATCH | Same setting as 4.1 (CIS lists it twice, at different levels); whichever runs first fixes it, the other then finds it compliant |
 | 4.4 | L2 | PATCH, **off by default** | `net.tls.FIPSMode: true`, only when TLS is on, otherwise prints FAIL |
-| 4.5 | L2 | REPORT | Encryption at rest on/off and the key management (KMIP or keyfile) |
+| 4.5 | L2 | REPORT | Encryption at rest on/off and the key management (KMIP or keyfile); enabling it is done by hand (D34) |
 
 ### Section 5: Audit Logging (`tasks/section_5/`)
 

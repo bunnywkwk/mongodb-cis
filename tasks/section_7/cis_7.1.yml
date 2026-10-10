@@ -10,38 +10,35 @@
     - rule_7.1
     - permissions
   vars:
+    # Key and certificate files mongod.conf points to (after this run's changes).
     mongodb8_cis_7_1_files: >-
-      {{ [discovered_mongod_conf['security']['keyFile'] | default(''),
-          discovered_mongod_conf['net']['tls']['certificateKeyFile'] | default(''),
-          discovered_mongod_conf['net']['tls']['CAFile'] | default('')] | select | list }}
+      {{ [mongodb8_cis_conf['security']['keyFile'] | default(''),
+          mongodb8_cis_conf['net']['tls']['certificateKeyFile'] | default(''),
+          mongodb8_cis_conf['net']['tls']['CAFile'] | default('')] | select | list }}
   block:
-    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Get key and certificate files"
+    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Get the files"
       ansible.builtin.stat:
         path: "{{ item }}"
-        get_checksum: false
       loop: "{{ mongodb8_cis_7_1_files }}"
-      register: discovered_7_1_stat
+      register: discovered_7_1_files
 
-    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Report when none configured"
+    - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Report when there are none"
       when: mongodb8_cis_7_1_files | length == 0
       ansible.builtin.debug:
-        msg: "7.1 NOT APPLICABLE: no keyFile, certificateKeyFile or CAFile in {{ mongodb8_cis_conf_path }}."
+        msg: "7.1 NOT APPLICABLE: mongod.conf has no keyFile, certificateKeyFile or CAFile."
 
     - name: "7.1 | AUDIT | Ensure appropriate key file permissions are set | Report each file"
-      loop: "{{ discovered_7_1_stat['results'] }}"
-      loop_control:
-        label: "{{ item['item'] }}"
       ansible.builtin.debug:
         msg: >-
-          7.1 {{ 'PASS' if (item['stat']['exists'] and item['stat']['mode'] in ['0600', '0400']
-          and item['stat']['pw_name'] == mongodb8_cis_service_user
-          and item['stat']['gr_name'] == mongodb8_cis_service_user) else 'FAIL' }}:
-          {{ item['item'] }} is {{ item['stat']['mode'] | default('MISSING') }}
-          {{ item['stat']['pw_name'] | default('-') }}:{{ item['stat']['gr_name'] | default('-') }}
-          (expected 0600 {{ mongodb8_cis_service_user }}:{{ mongodb8_cis_service_user }}).
+          7.1 {{ 'PASS' if item['stat']['mode'] | default('') in ['0600', '0400'] and item['stat']['pw_name'] | default('') == mongodb8_cis_service_user
+          else 'FAIL' }}: {{ item['item'] }} is {{ item['stat']['mode'] | default('missing') }} {{ item['stat']['pw_name'] | default('') }}
+          (CIS: 0600, owner {{ mongodb8_cis_service_user }}).
+      loop: "{{ discovered_7_1_files['results'] }}"
+      loop_control:
+        label: "{{ item['item'] }}"
 
-    # CIS remediation: chmod 600, owned by the mongo user. Only files that exist; the role never creates them.
-    - name: "7.1 | PATCH | Ensure appropriate key file permissions are set | Set 0600 and owner (site decision)"
+    # CIS remediation: chmod 600, owned by the mongod user.
+    - name: "7.1 | PATCH | Ensure appropriate key file permissions are set | Set 0600 and owner"
       when:
         - mongodb8_cis_fix_key_file_permissions
         - item['stat']['exists']
@@ -50,7 +47,7 @@
         owner: "{{ mongodb8_cis_service_user }}"
         group: "{{ mongodb8_cis_service_user }}"
         mode: "0600"
-      loop: "{{ discovered_7_1_stat['results'] }}"
+      loop: "{{ discovered_7_1_files['results'] }}"
       loop_control:
         label: "{{ item['item'] }}"
       tags:

@@ -11,8 +11,8 @@
   when: ansible_facts['selinux']['status'] | default('disabled') == 'enabled'
   vars:
     mongodb8_cis_selinux_build: "{{ ansible_facts['distribution_major_version'] in mongodb8_cis_selinux_build_os_majors }}"
-    mongodb8_cis_selinux_db_path: "{{ discovered_mongod_conf['storage']['dbPath'] | default(mongodb8_cis_default_db_path) }}"
-    mongodb8_cis_selinux_log_dir: "{{ discovered_mongod_conf['systemLog']['path'] | default(mongodb8_cis_default_log_path) | dirname }}"
+    mongodb8_cis_selinux_db_path: "{{ mongodb8_cis_conf['storage']['dbPath'] | default(mongodb8_cis_default_db_path) }}"
+    mongodb8_cis_selinux_log_dir: "{{ mongodb8_cis_conf['systemLog']['path'] | default(mongodb8_cis_default_log_path) | dirname }}"
   block:
     - name: "SELINUX | PATCH | Confine mongod with SELinux | Install the SELinux tools"
       ansible.builtin.dnf:
@@ -67,7 +67,7 @@
             # restarted mongod may not unlink the old socket and aborts (fassert 40486). mongod recreates them on start.
             - name: "SELINUX | PATCH | Confine mongod with SELinux | Find mongod socket files left by the old policy"
               ansible.builtin.find:
-                paths: "{{ discovered_mongod_conf['net']['unixDomainSocket']['pathPrefix'] | default('/tmp') }}"
+                paths: "{{ mongodb8_cis_conf['net']['unixDomainSocket']['pathPrefix'] | default('/tmp') }}"
                 patterns: "mongodb-*.sock"
                 file_type: any
               register: discovered_selinux_sockets

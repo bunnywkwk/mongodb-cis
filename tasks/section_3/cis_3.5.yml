@@ -10,63 +10,38 @@
     - rule_3.5
     - authorization
   vars:
-    mongodb8_cis_3_5_roles:
-      - root
-      - dbOwner
-      - userAdmin
-      - userAdminAnyDatabase
-      - readWriteAnyDatabase
-      - dbAdminAnyDatabase
-      - clusterAdmin
-      - hostManager
+    mongodb8_cis_3_5_roles: [root, dbOwner, userAdmin, userAdminAnyDatabase, readWriteAnyDatabase, dbAdminAnyDatabase, clusterAdmin, hostManager]
   block:
-    - name: "3.5 | AUDIT | Review Superuser/Admin Roles | Find users with superuser or admin roles"
+    - name: "3.5 | AUDIT | Review Superuser/Admin Roles | Find accounts with superuser or admin roles"
       community.mongodb.mongodb_shell:
         eval: >-
           db.getSiblingDB('admin').system.users.find({'roles.role': {$in: {{ mongodb8_cis_3_5_roles | to_json }}}},
-          {_id: 1, roles: 1}).toArray()
+          {_id: 1, user: 1, db: 1, roles: 1}).toArray()
         transform: json
       register: discovered_3_5_users
       changed_when: false
-      check_mode: false
 
     - name: "3.5 | AUDIT | Review Superuser/Admin Roles | Report"
       ansible.builtin.debug:
         msg: >-
-          3.5 REVIEW: {{ discovered_3_5_users['transformed_output'] | length }} user(s) hold one of
-          {{ mongodb8_cis_3_5_roles | join(', ') }}. Check each one below is needed
-          (list an account in mongodb8_cis_revoke_superuser_roles to let the role revoke them).
+          3.5 REVIEW: accounts holding {{ mongodb8_cis_3_5_roles | join(', ') }}:
+          {{ discovered_3_5_users['transformed_output'] | map(attribute='_id') | join(', ') or 'none' }}. Check each one is needed.
 
-    - name: "3.5 | AUDIT | Review Superuser/Admin Roles | Report each user"
-      ansible.builtin.debug:
-        msg: >-
-          3.5 REVIEW: {{ item['_id'] }} holds
-          {{ item['roles'] | selectattr('role', 'in', mongodb8_cis_3_5_roles) | map(attribute='role')
-             | zip(item['roles'] | selectattr('role', 'in', mongodb8_cis_3_5_roles) | map(attribute='db')) | map('join', '@') | join(', ') }}.
-      loop: "{{ discovered_3_5_users['transformed_output'] }}"
-      loop_control:
-        label: "{{ item['_id'] }}"
-
-    # The role logs in as this admin for its database reads (D24); revoking its roles would lock the role out.
-    - name: "3.5 | PATCH | Review Superuser/Admin Roles | Check the list does not include the role's own admin"
-      when: mongodb8_cis_revoke_superuser_roles | length > 0
+    # The role logs in as its own admin; revoking its roles would lock the role out.
+    - name: "3.5 | PATCH | Review Superuser/Admin Roles | Check the role's own admin is not listed"
       ansible.builtin.assert:
         that:
           - ('admin.' ~ mongodb8_cis_admin_user) not in mongodb8_cis_revoke_superuser_roles
-        fail_msg: >-
-          3.5: mongodb8_cis_revoke_superuser_roles contains admin.{{ mongodb8_cis_admin_user }}, the admin the role logs in
-          with (mongodb8_cis_admin_user). Remove it from the list.
+        fail_msg: "3.5: remove admin.{{ mongodb8_cis_admin_user }} (the role's own admin) from mongodb8_cis_revoke_superuser_roles."
       tags:
         - patch
 
-    # CIS: superuser/admin roles only where needed. Only the accounts the site lists (site decision); the account stays.
+    # CIS: superuser/admin roles only where needed. Only from the accounts the site lists; the account stays.
     - name: "3.5 | PATCH | Review Superuser/Admin Roles | Revoke the roles from the listed accounts"
-      when:
-        - item['_id'] in mongodb8_cis_revoke_superuser_roles
-        - item['roles'] | selectattr('role', 'in', mongodb8_cis_3_5_roles) | list | length > 0
+      when: item['_id'] in mongodb8_cis_revoke_superuser_roles
       community.mongodb.mongodb_shell:
         eval: >-
-          db.getSiblingDB({{ item['_id'].split('.')[0] | to_json }}).revokeRolesFromUser({{ item['_id'].split('.', 1)[1] | to_json }},
+          db.getSiblingDB({{ item['db'] | to_json }}).revokeRolesFromUser({{ item['user'] | to_json }},
           {{ item['roles'] | selectattr('role', 'in', mongodb8_cis_3_5_roles) | list | to_json }})
       loop: "{{ discovered_3_5_users['transformed_output'] }}"
       loop_control:

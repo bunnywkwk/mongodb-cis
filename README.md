@@ -1,9 +1,9 @@
 # mongodb8_cis
 
-Ansible role that hardens a standalone **MongoDB 8.0 Enterprise** server (`mongod`) on **RHEL 8, 9 and 10** to the
+Ansible role that hardens a **MongoDB 8.0 Enterprise** server (`mongod`: standalone, or a replica set / shard / config server member) on **RHEL 8, 9 and 10** to the
 **CIS MongoDB 8 Benchmark v2.0.0**, in the [ansible-lockdown](https://github.com/ansible-lockdown) style.
 Every task maps to one CIS recommendation. Manual recommendations only report; Automated ones fix drift and report
-what they changed. Platforms: RHEL and compatible (Rocky, Alma, Oracle with RHCK), x86_64.
+what they changed. Platforms: RHEL and compatible (Rocky, Alma, Oracle with RHCK); tested on x86_64.
 
 ## Requirements
 
@@ -42,14 +42,15 @@ mongodb8_cis_level_2: true
 mongodb8_cis_rule_6_3: false
 mongodb8_cis_section7: false
 
-# Disruptive rules: off by default, turn on each one when ready (see below)
-mongodb8_cis_rule_2_1: true
-mongodb8_cis_rule_4_3: true
-mongodb8_cis_rule_6_1: true
+# Exceptions: CIS rules this organization does not apply (and why)
+mongodb8_cis_rule_4_4: false          # no FIPS mode on these servers
+mongodb8_cis_javascript_needed: true  # 6.3: our app uses mapReduce
+
+# Values the rules need
 mongodb8_cis_admin_user: siteAdmin
-mongodb8_cis_admin_password: "{{ vault_mongodb_admin_password }}"
-mongodb8_cis_tls_certificate_key_file: /etc/pki/mongodb/server.pem
-mongodb8_cis_tls_ca_file: /etc/pki/mongodb/ca.pem
+mongodb8_cis_admin_password: "Change.Me.1"
+mongodb8_cis_tls_certificate_key_src: files/pki/{{ inventory_hostname }}.pem   # server cert + key, copied to the server
+mongodb8_cis_tls_ca_src: files/pki/ca.pem                                      # your CA certificate
 mongodb8_cis_port: 27100
 ```
 
@@ -64,17 +65,20 @@ mongodb8_cis_port: 27100
 
 Reports are printed as `<ID> PASS`, `FAIL`, `REVIEW` or `NOT APPLICABLE` with the value found.
 
-## Disruptive rules (off by default)
+## Rules that change what clients can do (on by default)
 
-Their rule toggles are `false` by default. Turn each one on by name, after preparing what it needs and the clients.
+The role applies the full benchmark. Turn off what your organization can't accept with `mongodb8_cis_rule_<id>: false`;
+that list is your compliance exception list. A rule whose value you haven't set reports `NOT APPLIED` and skips.
 
 | Rule | Change | Needs | Breaks |
 |------|--------|-------|--------|
-| 2.1 | Creates the admin user (root@admin), then `security.authorization: enabled` | `mongodb8_cis_admin_user`, `_password` (Vault; no spaces, quotes or backslashes) | Clients without credentials |
+| 2.1 | Creates the admin user (root@admin), then `security.authorization: enabled` | `mongodb8_cis_admin_user`, `_password` (no spaces, quotes or backslashes) | Clients without credentials |
 | 2.2 | `enableLocalhostAuthBypass: false` | At least one user (2.1) | The localhost login without a user |
-| 4.3 | `net.tls.mode: requireTLS` | PEM files on the host: `mongodb8_cis_tls_certificate_key_file`, `_tls_ca_file` | Clients without TLS |
-| 4.4 | `net.tls.FIPSMode: true` | TLS (4.3) | SCRAM-SHA-1 and non-FIPS ciphers |
+| 2.3 | Cluster members: `clusterAuthMode: x509` + `net.tls.clusterFile` (N/A on a standalone) | TLS (4.3); optional `mongodb8_cis_cluster_file` | Members not changed in the same run |
+| 4.3 | `net.tls.mode: requireTLS` | 2 files from your CA: server certificate + key in one PEM, and the CA certificate (`mongodb8_cis_tls_certificate_key_src` / `_tls_ca_src`; the role copies them to `/etc/pki/mongodb/`) | Clients without TLS and a certificate signed by your CA |
+| 4.4 | `net.tls.FIPSMode: true` | TLS (4.3) and the OS in FIPS mode | SCRAM-SHA-1 and non-FIPS ciphers |
 | 6.1 | Non-default `net.port`; with SELinux enabled, labels it `mongod_port_t` | `mongodb8_cis_port` (1024–65535) | Every connection string using 27017; firewall rules |
+| 6.3 | `security.javascriptEnabled: false` | — (`mongodb8_cis_javascript_needed: true` keeps it) | Apps using `$where`, `mapReduce`, `$function` |
 
 Other rules that change `mongod.conf` and restart `mongod` once: 4.1/4.2 (only when TLS is on), 5.1 (adds `auditLog`,
 default `syslog`, only when missing), 5.3, 5.4. Every write keeps a backup of `mongod.conf`.
@@ -86,6 +90,7 @@ Manual rules only report by default. Where CIS gives one concrete fix, a variabl
 | Rule | Variable (default = report only) | When set |
 |------|----------------------------------|----------|
 | 3.1 | `mongodb8_cis_revoke_admin_roles: []` | revokes `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin from the listed accounts, e.g. `["admin.badadmin"]` |
+| 3.2 | `mongodb8_cis_users: []` | creates the accounts you list (if missing) and adds the roles they lack, e.g. `- {user: appuser, db: shop, password: "App.Pass.1", roles: [{role: readWrite, db: shop}]}`. Never removes a role; accounts not listed are not touched |
 | 3.4 | `mongodb8_cis_drop_custom_roles: []` | drops the custom roles you list, e.g. `["shop.orderReader"]` |
 | 3.5 | `mongodb8_cis_revoke_superuser_roles: []` | revokes every superuser/admin role from the listed accounts, e.g. `["admin.ops"]`; never the role's own admin |
 | 5.2 | `mongodb8_cis_audit_filter: ""` | writes your `auditLog.filter` (auditing must be on, 5.1) |
@@ -94,7 +99,7 @@ Manual rules only report by default. Where CIS gives one concrete fix, a variabl
 | 7.1 | `mongodb8_cis_fix_key_file_permissions: false` | key, TLS key and CA files → `0600`, owner mongod |
 | 7.2 | `mongodb8_cis_fix_db_path_permissions: false` | dbPath → `0770`, owner mongod |
 
-The other Manual rules (1.1, 3.2, 3.3, 4.5) need a person; hand fixes are in
+The other Manual rules (1.1, 3.3, 4.5) need a person; hand fixes are in
 [`docs/manual-remediation.md`](docs/manual-remediation.md), and why they aren't automated in
 [`docs/automation-decisions.md`](docs/automation-decisions.md). How to prove a host is compliant:
 [`docs/compliance-test.md`](docs/compliance-test.md).

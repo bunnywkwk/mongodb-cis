@@ -6,16 +6,13 @@
 
 # Supported targets (RHEL family, verified in platform-notes).
 mongodb8_cis_supported_os_majors: ["8", "9", "10"]
-mongodb8_cis_supported_arch: x86_64
 
 # Official MongoDB Enterprise repo (S1). Only the OS major and release series change.
 mongodb8_cis_repo_name: "mongodb-enterprise-{{ mongodb8_cis_version }}"
 mongodb8_cis_repo_baseurl: >-
   {{ 'https://repo.mongodb.com/yum/redhat/' ~ ansible_facts['distribution_major_version']
   ~ '/mongodb-enterprise/' ~ mongodb8_cis_version ~ '/$basearch/' }}
-# Key file name: server-8.0.asc for 8.0; server-<major>.asc from 9.0 (S2).
-mongodb8_cis_repo_key_series: "{{ mongodb8_cis_version if mongodb8_cis_version is version('9.0', '<') else mongodb8_cis_version.split('.')[0] }}"
-mongodb8_cis_repo_gpgkey: "https://pgp.mongodb.com/server-{{ mongodb8_cis_repo_key_series }}.asc"
+mongodb8_cis_repo_gpgkey: "https://pgp.mongodb.com/server-{{ mongodb8_cis_version }}.asc"
 
 # MongoDB release series covered by the CIS MongoDB 8 Benchmark v2.0.0 (S5).
 mongodb8_cis_supported_versions: ["8.0"]
@@ -33,31 +30,43 @@ mongodb8_cis_default_db_path: /var/lib/mongo
 mongodb8_cis_default_log_path: /var/log/mongodb/mongod.log
 mongodb8_cis_default_user: mongod
 
-# The user mongod really runs as (systemd unit User=), read in prelim; RPM default as fallback (D8).
+# Installed MongoDB server version (prelim package_facts).
+discovered_mongodb_version: "{{ ansible_facts['packages'][mongodb8_cis_server_package][0]['version'] }}"
+
+# The user mongod runs as (systemd User=); RPM default as fallback.
 mongodb8_cis_service_user: "{{ discovered_mongod_service['status']['User'] | default(mongodb8_cis_default_user, true) }}"
 
-# Where mongod listens, from the live config (prelim). Used by the restart handler's port check.
-# First bindIp entry; 0.0.0.0 (all interfaces) is checked on 127.0.0.1.
-mongodb8_cis_listen_port: "{{ discovered_mongod_conf['net']['port'] | default(27017) }}"
-mongodb8_cis_listen_host: "{{ (discovered_mongod_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"
+# Values from the config the rules are building (mongodb8_cis_conf, written in post.yml).
+# TLS is on: mongod refuses other net.tls options without it (4.1, 4.2, 4.4).
+mongodb8_cis_tls_enabled: "{{ mongodb8_cis_conf['net']['tls']['mode'] | default('disabled') != 'disabled' }}"
+# 4.3: where the role puts the certificate files on the server (copied from the _src files in defaults).
+mongodb8_cis_tls_certificate_key_file: /etc/pki/mongodb/server.pem
+mongodb8_cis_tls_ca_file: /etc/pki/mongodb/ca.pem
+# 4.3 will turn TLS on in this run: rule on and both certificate files given.
+mongodb8_cis_tls_ready: >-
+  {{ mongodb8_cis_section4 and mongodb8_cis_rule_4_3 and mongodb8_cis_level_1
+     and mongodb8_cis_tls_certificate_key_src | length > 0 and mongodb8_cis_tls_ca_src | length > 0 }}
+# Replica set, shard or config server member (2.3).
+mongodb8_cis_cluster_member: >-
+  {{ mongodb8_cis_conf['sharding']['clusterRole'] is defined or mongodb8_cis_conf['replication']['replSetName'] is defined }}
+# Where the restarted mongod listens (restart handler). 0.0.0.0 is checked on 127.0.0.1.
+mongodb8_cis_listen_port: "{{ mongodb8_cis_conf['net']['port'] | default(27017) }}"
+mongodb8_cis_listen_host: "{{ (mongodb8_cis_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"
 
-# SELinux (D11, D17; platform-notes "SELinux"). Ports the base policy already labels mongod_port_t on RHEL 8/9/10.
+# SELinux. Ports the base policy already labels mongod_port_t on RHEL 8/9/10.
 mongodb8_cis_selinux_default_ports: [27017, 27018, 27019, 28017, 28018, 28019]
-# RHEL majors where MongoDB's own policy module builds (tested). RHEL 8: it does not build, and the base policy's
-# mongodb module already confines mongod.
+# RHEL majors where MongoDB's own policy module builds. RHEL 8: the base policy already confines mongod.
 mongodb8_cis_selinux_build_os_majors: ["9", "10"]
-# Where the module sources are copied and built on the host.
 mongodb8_cis_selinux_src_dir: /usr/share/mongodb8_cis/selinux
 
-# TLS is configured in mongod.conf (including edits made earlier in this run). mongod refuses TLS options without it.
-mongodb8_cis_tls_enabled: "{{ discovered_mongod_conf['net']['tls']['mode'] | default('disabled') != 'disabled' }}"
-
-# How the role's own mongosh reaches mongod (sections 2, 3; D24). Built from the config mongod is running with
-# (prelim snapshot): edits made in this run only apply after the restart handler.
-mongodb8_cis_shell_host: "{{ (discovered_mongod_running_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"
-mongodb8_cis_shell_port: "{{ discovered_mongod_running_conf['net']['port'] | default(27017) }}"
-mongodb8_cis_shell_auth: "{{ discovered_mongod_running_conf['security']['authorization'] | default('disabled') == 'enabled' }}"
-mongodb8_cis_shell_tls: "{{ discovered_mongod_running_conf['net']['tls']['mode'] | default('disabled') == 'requireTLS' }}"
-mongodb8_cis_shell_ca_file: "{{ discovered_mongod_running_conf['net']['tls']['CAFile'] | default('') }}"
+# How the role's mongosh reaches mongod (sections 2, 3): the config mongod runs with now (before this run's restart).
+mongodb8_cis_shell_host: "{{ (discovered_mongod_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"
+mongodb8_cis_shell_port: "{{ discovered_mongod_conf['net']['port'] | default(27017) }}"
+mongodb8_cis_shell_auth: "{{ discovered_mongod_conf['security']['authorization'] | default('disabled') == 'enabled' }}"
+mongodb8_cis_shell_tls: "{{ discovered_mongod_conf['net']['tls']['mode'] | default('disabled') == 'requireTLS' }}"
+mongodb8_cis_shell_ca_file: "{{ discovered_mongod_conf['net']['tls']['CAFile'] | default('') }}"
+# The role's own client certificate (4.3) when the site gives one, otherwise the server certificate.
+mongodb8_cis_shell_client_cert_path: /etc/pki/mongodb/mongodb8_cis-client.pem
 mongodb8_cis_shell_client_cert: >-
-  {{ mongodb8_cis_shell_tls_certificate_key_file or discovered_mongod_running_conf['net']['tls']['certificateKeyFile'] | default('') }}
+  {{ mongodb8_cis_shell_client_cert_path if mongodb8_cis_shell_tls_certificate_key_src | length > 0
+     else discovered_mongod_conf['net']['tls']['certificateKeyFile'] | default('') }}

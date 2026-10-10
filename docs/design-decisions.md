@@ -10,7 +10,7 @@ Every decision below has three parts: **Decision**, **Why**, and **Evidence**. S
 | L4 | ansible-lockdown `RHEL9-CIS` (devel, cloned 2026-09-29): `grep -rn rhel9cis_level_ tasks/` finds nothing. The level vars appear only in `templates/lockdown_audit.yml.j2` and `templates/etc/ansible/compliance_facts.j2`. README, *Matching a security Level for CIS*: *"This is managed using tags"*. Tag count: 237 rules tagged level1 only, 57 level2 only, 8 both |
 | L3 | ansible-lockdown `RHEL9-CIS`, `defaults/main/main.yml` (`rhel9cis_disruption_high: false`, `rhel9cis_section1`, `rhel9cis_level_1`) and `defaults/main/audit.yml` (`setup_audit`, `run_audit`, `audit_only`) |
 
-Scope: **MongoDB Enterprise 8.0, standalone `mongod`, RHEL 8, 9 and 10**, CIS MongoDB 8 Benchmark v2.0.0 (S5, S6).
+Scope: **MongoDB Enterprise 8.0, `mongod` (standalone; 2.3 also on shard, config server and replica set members, D31), RHEL 8, 9 and 10**, CIS MongoDB 8 Benchmark v2.0.0 (S5, S6).
 Chosen with the user on 2026-09-29 (RHEL 8 added the same day). Edition changed from Community to Enterprise on 2026-10-01 (D12).
 
 > Recovery note: this file and `platform-notes.md` were rebuilt on 2026-09-29 after an accidental
@@ -460,6 +460,8 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 
 ## D29. Coverage: every rule is implemented; 7 stay report-only on purpose
 
+> **Revised 2026-10-10 by D31:** 2.3, 3.2 and 4.5 moved to opt-in; **2 only report: 1.1, 3.3.**
+>
 > **Revised 2026-10-06 by D30:** 3.4 and 3.5 moved to opt-in. Now 18 can change the host (10 Automated + 8 Manual with an
 > opt-in variable) and **5 only report: 1.1, 2.3, 3.2, 3.3, 4.5.**
 
@@ -514,17 +516,83 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 - **Tested:** expressions with fake `mongosh` output (2026-10-06): only listed objects; a listed account without 3.5 roles and
   an unlisted role skipped; the guard stops the run when the role's admin is listed. **Not yet on a real mongod.**
 
+## D31. Wider scope, fresh installs first: 2.3, 3.2 and 4.5 (revises D29, D30, "Not adopted")
+
+- **Decision (2026-10-10, user direction):** the role targets a **fresh** server first and should be easy for any
+  organization; 2.3, 3.2 and 4.5 can now change the host. Existing servers are handled where it is simple, otherwise
+  reported. 1.1 and 3.3 stay report only (3.3: the RPM already runs mongod as `mongod`, user decision).
+
+  | Rule | Setting | Does | Kept out (not in CIS, or over-engineering) |
+  |------|---------|------|------------|
+  | 2.3 | `mongodb8_cis_rule_2_3: false` (WARNING, like other restart rules), `mongodb8_cis_cluster_file: ""` | on a replica set / shard / config server member: `security.clusterAuthMode: x509` + `net.tls.clusterFile` (empty = the 4.3 server cert); standalone → N/A | keyFile mode (CIS: *"development only"*); TLS settings (4.3 writes them, 2.3 checks 4.3 is on) |
+  | 3.2 | `mongodb8_cis_users: []` (user, db, password, roles) | creates listed accounts that don't exist; adds listed roles an account is missing | removing roles (3.1/3.5 lists do that), changing passwords, `authenticationRestrictions` |
+  | 4.5 | `mongodb8_cis_encryption: {}` (written as-is under `security:`, like 5.1's `mongodb8_cis_audit_log`) | `enableEncryption: true` + the KMIP or keyfile settings, in `section_4/cis_4.5.yml` (imported from `main.yml` before mongod's first start), only when dbPath has no data | migrating existing data (hand procedure in manual-remediation.md); key creation (the site owns the key and its backup) |
+
+- **Why each passes D29's test now:** 1 ✅ CIS gives the setting (2.3 config lines, 3.2 *"assign the appropriate users
+  to each role"*, 4.5 `enableEncryption` + key management). 2 ✅ one switch / one list / one dict, using MongoDB's own
+  names. 3 ✅ nothing is removed: 2.3 only on cluster members, 3.2 only adds, 4.5 only on an empty dbPath. 4 ✅ a fresh
+  server fails all three.
+- **Scope note (2.3):** the CIS title says *sharded cluster*; replica set members use the same internal
+  authentication and a shard is a replica set, so `sharding.clusterRole` **or** `replication.replSetName` = member.
+  `mongos` is not managed. CIS Audit also lists `authenticationMechanisms: MONGODB-X509`; setting it turns off password
+  login, including the role's own admin (D24), so it is not written.
+- **3.2 when the list is empty:** nothing happens. Accounts not in the list are never touched.
+- **Tested:** Jinja expressions with fake config/`mongosh` output, 2026-10-10. **Not yet on a VM.**
+- **Revised 2026-10-10 (same day):** a first version had a 2.3 mode variable (x509/keyFile), an exact-set 3.2 dict that
+  also removed roles, and 4.5 mode + 5 KMIP variables with file checks. Trimmed after user review ("easy to use,
+  fresh first, don't over-engineer").
+
+## D32. TLS certificate files: the role can copy them (4.3)
+
+- **Decision (2026-10-10, user choice):** 4.3 keeps mongod's two settings, `certificateKeyFile` (server certificate +
+  private key in one PEM) and `CAFile` (the CA certificate), now with default paths `/etc/pki/mongodb/server.pem` and
+  `ca.pem`. Optional `mongodb8_cis_tls_certificate_key_src` / `_tls_ca_src`: the role copies the files from the
+  control node (owner mongod, `0600`, restart on change). Empty = files already on the server (as before).
+  Optional `mongodb8_cis_shell_tls_certificate_key_src`: the role's own client certificate, copied to
+  `/etc/pki/mongodb/mongodb8_cis-client.pem` (owner root); replaces `mongodb8_cis_shell_tls_certificate_key_file`.
+- **Why:** an organization gets certificates from its own CA; copying them was a separate lab playbook
+  (`prep-tls.yml` in the test project), an extra step a non-technical team would miss. Certificate renewal becomes
+  "replace the source file, rerun". Company server certificates often allow only `serverAuth`; with `requireTLS` +
+  `CAFile` mongod asks every client for a certificate, so the role needs its own client certificate there.
+- **Evidence:** CIS 4.3 remediation (`requireTLS`, `certificateKeyFile`, `CAFile`); MongoDB `net.tls.certificateKeyFile`
+  holds certificate and key in one file on Linux (no separate key option).
+- **Revised 2026-10-10 (same day, user review):** the two path variables were redundant with `_src`: removed from
+  defaults. The server paths are fixed in `vars/main.yml` (`/etc/pki/mongodb/server.pem`, `ca.pem`); 4.3 applies when both
+  `_src` are set, otherwise reports `NOT APPLIED`. Files placed on the server another way are no longer an option.
+- **Not added:** `CRLFile`, `certificateKeyFilePassword` (not in CIS; add when a site needs them).
+- **Tested:** lint and syntax of the role rebuilt from `build-guide.md`; not yet on a VM.
+
+## D33. Every CIS rule on by default (revises D6/D20 defaults, user direction 2026-10-10)
+
+- **Decision:** like `chrome_cis` D5: risky rules (2.1, 2.2, 2.3, 4.3, 4.4, 6.1) default `true`, and so do the Manual
+  fixes with a fixed CIS value (6.2 limits, 6.3 JavaScript off, 7.1, 7.2). The organization sets `false` for what it
+  can't accept; `group_vars` = its exception list. Values only the site knows (admin, port, certificates, lists, filter,
+  encryption key) stay empty: the rule reports `NOT APPLIED` and skips, never fails the run. Level 2 stays opt-in (D18).
+- **Why:** the user applies hardening this way ("CIS said it, so it's on; we turn it off only when it limits what we
+  need") and wants one convention across roles.
+- **Safety kept:** 2.2 waits for a user; 2.3 and 4.3 wait for certificate files (`mongodb8_cis_tls_ready`); 4.4 waits for TLS and
+  an OS in FIPS mode (mongod would not start otherwise); 4.5 only on an empty dbPath.
+- **Tested:** lint, syntax, and the `mongodb8_cis_tls_ready` expression locally; not yet on a VM.
+
+## D34. 4.5 back to report only (revises D31 for 4.5)
+
+- **Decision (2026-10-10, user):** 4.5 only reports; the organization enables encryption at rest by hand
+  (manual-remediation.md 4.5). `mongodb8_cis_encryption` removed.
+- **Why:** automating it needed the rule to run before mongod's first start, out of the section order
+  (`main.yml` calling 4.5 early, or a CIS step inside `install.yml`). The user preferred the plain Lockdown layout; CIS
+  marks 4.5 Manual, so report only is still compliant. Key management (KMIP/keyfile) is the organization's design anyway.
+
 ## Not adopted
 
 - **Lockdown's Goss audit framework** (`setup_audit`, `run_audit`, `audit_only`, L3): it adds an extra tool and binary to maintain. The AUDIT steps plus `--check --diff` already give a read-only compliance view.
 - **Per-OS vars files** (`vars/RedHat.yml`, `vars/Rocky.yml`, ...): there is no per-OS difference (D1).
-- **Section 3 fixes for 3.2–3.3** (declared users/roles via `mongodb_user`/`mongodb_role`; 3.4/3.5 name lists adopted in D30): report only (D28,
+- **Section 3 fixes for 3.2–3.3** (Revised 2026-10-10: 3.2 role assignment adopted as an opt-in, D31; 3.3 stays report only) (declared users/roles via `mongodb_user`/`mongodb_role`; 3.4/3.5 name lists adopted in D30): report only (D28,
   user decision 2026-10-04/05). A 3.2 declared-accounts list was built on the rebuild branch and reverted as too complex.
 - **3.3 fix** (switch a root-run mongod to a service account): the RPM already passes; the FAIL case means re-owning
   unknown files, and one miss stops mongod. Hand steps in [manual-remediation.md](manual-remediation.md).
 - **3.4 fix** (`revokePrivilegesFromRole` from a site list): role + db + resource + actions per entry; only the app
   team knows what is unneeded. Hand steps in [manual-remediation.md](manual-remediation.md).
-- **2.3 fix** (`clusterAuthMode` + keyFile/x509): needs every cluster member and a rolling restart; standalone scope.
-- **4.5 fix** (encryption at rest): MongoDB *"cannot encrypt existing data"*; keyfile *"does not meet most regulatory
+- ~~**2.3 fix**~~ **Revised 2026-10-10: adopted as an opt-in (D31).**
+- **4.5 fix on existing data** (Revised 2026-10-10: a new install is now an opt-in, D31): MongoDB *"cannot encrypt existing data"*; keyfile *"does not meet most regulatory
   key management guidelines"*; KMIP is external infrastructure; a lost key loses all data. Evidence and future options:
   [manual-remediation.md](manual-remediation.md) 4.5.

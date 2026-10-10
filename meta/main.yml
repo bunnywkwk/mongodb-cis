@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   author: "Aeron Trainee at AIRNAV"
-  description: "Harden MongoDB 8.0 Enterprise (standalone) on RHEL 8/9/10 to the CIS MongoDB 8 Benchmark v2.0.0"
+  description: "Harden MongoDB 8.0 Enterprise (mongod) on RHEL 8/9/10 to the CIS MongoDB 8 Benchmark v2.0.0"
   license: MIT
   role_name: mongodb8_cis
   namespace: bunnywkwk

@@ -10,24 +10,22 @@
     - rule_7.2
     - permissions
   vars:
-    mongodb8_cis_7_2_db_path: "{{ discovered_mongod_conf['storage']['dbPath'] | default(mongodb8_cis_default_db_path) }}"
+    mongodb8_cis_7_2_db_path: "{{ mongodb8_cis_conf['storage']['dbPath'] | default(mongodb8_cis_default_db_path) }}"
   block:
-    - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set. | Get dbPath permissions"
+    - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set. | Get dbPath"
       ansible.builtin.stat:
         path: "{{ mongodb8_cis_7_2_db_path }}"
-      register: discovered_db_path
+      register: discovered_7_2_db_path
 
     - name: "7.2 | AUDIT | Ensure appropriate database file permissions are set. | Report"
       ansible.builtin.debug:
         msg: >-
-          7.2 {{ 'PASS' if (discovered_db_path.stat.mode == '0770'
-          and discovered_db_path.stat.pw_name == mongodb8_cis_service_user
-          and discovered_db_path.stat.gr_name == mongodb8_cis_service_user) else 'FAIL' }}:
-          {{ mongodb8_cis_7_2_db_path }} is {{ discovered_db_path.stat.mode }}
-          {{ discovered_db_path.stat.pw_name }}:{{ discovered_db_path.stat.gr_name }}
-          (expected 0770 {{ mongodb8_cis_service_user }}:{{ mongodb8_cis_service_user }}).
+          7.2 {{ 'PASS' if discovered_7_2_db_path['stat']['mode'] == '0770' and discovered_7_2_db_path['stat']['pw_name'] == mongodb8_cis_service_user
+          else 'FAIL' }}: {{ mongodb8_cis_7_2_db_path }} is {{ discovered_7_2_db_path['stat']['mode'] }}
+          {{ discovered_7_2_db_path['stat']['pw_name'] }} (CIS: 0770, owner {{ mongodb8_cis_service_user }}).
 
-    - name: "7.2 | PATCH | Ensure appropriate database file permissions are set. | Set 0770 and owner (site decision)"
+    # CIS remediation: chmod 770, owned by the mongod user.
+    - name: "7.2 | PATCH | Ensure appropriate database file permissions are set. | Set 0770 and owner"
       when: mongodb8_cis_fix_db_path_permissions
       ansible.builtin.file:
         path: "{{ mongodb8_cis_7_2_db_path }}"

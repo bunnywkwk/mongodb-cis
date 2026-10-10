@@ -3,28 +3,11 @@
   when:
     - mongodb8_cis_rule_5_4
     - mongodb8_cis_level_2
-    - discovered_mongod_conf['systemLog']['logAppend'] | default(false) is not true
   tags:
     - level2
     - automated
     - patch
     - rule_5.4
     - logging
-  vars:
-    mongodb8_cis_5_4_settings:
-      systemLog:
-        logAppend: true
-  block:
-    - name: "5.4 | PATCH | Ensure that new entries are appended to the end of the log file | Set systemLog.logAppend: true"
-      ansible.builtin.copy:
-        dest: "{{ mongodb8_cis_conf_path }}"
-        content: "{{ discovered_mongod_conf | combine(mongodb8_cis_5_4_settings, recursive=true) | to_nice_yaml(indent=2) }}"
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-      notify: Restart mongod
-
-    - name: "5.4 | PATCH | Ensure that new entries are appended to the end of the log file | Update the parsed config"
-      ansible.builtin.set_fact:
-        discovered_mongod_conf: "{{ discovered_mongod_conf | combine(mongodb8_cis_5_4_settings, recursive=true) }}"
+  ansible.builtin.set_fact:
+    mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'systemLog': {'logAppend': true}}, recursive=true) }}"

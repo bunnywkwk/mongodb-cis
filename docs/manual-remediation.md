@@ -11,23 +11,23 @@ Source: CIS MongoDB 8 Benchmark v2.0.0, Remediation of each rule; MongoDB 8.0 ma
 How each was weighed (one concrete fix, simple input, safe if wrong, worth it), with what an automated option would
 have looked like: [automation-decisions.md](automation-decisions.md) (summary: D29).
 
-All other rules are automated, or have an optional site variable (D20). Risky automated rules (2.1, 2.2, 4.3, 4.4, 6.1)
+All other rules are automated, or have an optional site variable (D20, D30, D31: 2.3, 3.2 and 4.5 since 2026-10-10). Risky automated rules (2.1, 2.2, 4.3, 4.4, 6.1)
 are off by default but **are** automated: turn them on in `group_vars`.
 
 | Rule | CIS type | Role does | Why no automated fix | Fix by hand |
 |------|----------|-----------|----------------------|-------------|
 | 1.1 | Manual | reports installed version | an upgrade restarts the database; needs a change window | `dnf update mongodb-enterprise*` in a change window |
-| 2.3 | Automated | reports N/A on a standalone | sharded clusters only; needs one keyFile/x509 on every member + rolling restart (out of scope: standalone only, see design-decisions.md Scope) | MongoDB docs: "Deploy Sharded Cluster with Keyfile Authentication" |
-| 3.2 | Manual | reports authorization + every user's roles | which roles each account needs is a people decision | [3.2](#32-role-based-access-control) |
+| 2.3 | Automated | N/A on a standalone; on members, x509 with `mongodb8_cis_rule_2_3: true` (D31) | a **rolling** change (no downtime) on a running cluster needs MongoDB's transition modes; the role changes all members in one run | MongoDB docs: "Upgrade a Running Replica Set/Sharded Cluster to X.509 Internal Authentication" |
+| 3.2 | Manual | reports + optional `mongodb8_cis_users` (D31) | removing roles (3.1/3.5 lists) and custom roles stay by hand | [3.2](#32-role-based-access-control) |
 | 3.3 | Manual | reports who mongod runs as | RPM default already passes; fixing a root-run mongod means re-owning unknown files | [3.3](#33-non-privileged-service-account) |
-| 4.5 | Manual | reports encryption at rest | only on an empty dbPath + key management (KMIP/keyfile) design | [4.5](#45-encryption-of-data-at-rest) |
+| 4.5 | Manual | reports encryption at rest (D34: report only) | a server that already has data needs dump → empty dbPath → restore | [4.5](#45-encryption-of-data-at-rest) |
 
 ## Section 3 — Authorization
 
 | Rule | Role reports | Automated? | Fix by hand |
 |------|--------------|-----------|-------------|
 | 3.1 | accounts with `dbOwner` / `userAdmin` / `userAdminAnyDatabase` in admin | optional: `mongodb8_cis_revoke_admin_roles` | [3.1](#31-least-privilege-for-database-accounts) |
-| 3.2 | authorization state + every user's roles | no | [3.2](#32-role-based-access-control) |
+| 3.2 | authorization state + every user's roles | optional: `mongodb8_cis_users` (create accounts, add missing roles) | [3.2](#32-role-based-access-control) |
 | 3.3 | who mongod runs as | no (RPM default passes) | [3.3](#33-non-privileged-service-account) |
 | 3.4 | every custom role with its actions | optional: `mongodb8_cis_drop_custom_roles` (whole roles; trimming privileges stays by hand) | [3.4](#34-each-role-grants-only-the-necessary-privileges) |
 | 3.5 | users with superuser/admin roles | optional: `mongodb8_cis_revoke_superuser_roles` (never the role's own admin) | [3.5](#35-review-superuser-admin-roles) |
@@ -108,8 +108,10 @@ Docs: <https://www.mongodb.com/docs/manual/reference/built-in-roles/>
 
 ### 4.5 Encryption of data at rest
 
-The role reports `security.enableEncryption` and the key management in use. It does **not** enable it (see the
-evidence below). CIS recommends KMIP (an external key server); a local keyfile is the other option.
+The role reports `security.enableEncryption` and the key management in use. **Revised 2026-10-10 (D31):** with
+`mongodb8_cis_encryption` (the KMIP or keyfile settings) it enables encryption on a **new install** (before mongod's
+first start, empty dbPath; option A/B below). On a server that already has data it changes nothing and reports `NOT APPLIED`: use the
+hand procedure (see the evidence below). CIS recommends KMIP (an external key server); a local keyfile is the other option.
 
 **By hand, standalone, local keyfile** (test first; take a backup; plan downtime):
 

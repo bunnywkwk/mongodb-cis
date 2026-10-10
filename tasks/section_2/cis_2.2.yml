@@ -3,46 +3,27 @@
   when:
     - mongodb8_cis_rule_2_2
     - mongodb8_cis_level_1
-    - discovered_mongod_conf['setParameter']['enableLocalhostAuthBypass'] | default(true) | bool
   tags:
     - level1
     - automated
     - patch
     - rule_2.2
     - authentication
-  vars:
-    mongodb8_cis_2_2_settings:
-      setParameter:
-        enableLocalhostAuthBypass: false
   block:
-    - name: "2.2 | AUDIT | Ensure that MongoDB does not bypass authentication via the localhost exception | Count database users"
+    - name: "2.2 | AUDIT | Ensure that MongoDB does not bypass authentication via the localhost exception | Count users"
       community.mongodb.mongodb_shell:
         eval: "db.getSiblingDB('admin').system.users.countDocuments({})"
         transform: raw
       register: discovered_2_2_users
       changed_when: false
-      check_mode: false
 
-    # In --check, 2.1 only simulates creating the admin user, so the count can still be 0.
-    - name: "2.2 | PATCH | Ensure that MongoDB does not bypass authentication via the localhost exception | Check a user exists"
-      ansible.builtin.assert:
-        that:
-          - discovered_2_2_users['transformed_output'] | int > 0 or ansible_check_mode
-        fail_msg: >-
-          2.2: no database user exists. Without the localhost exception nobody could log in once authorization is on.
-          Create a user first (rule 2.1).
-        quiet: true
+    # Without the localhost exception and without a user, nobody could log in.
+    - name: "2.2 | AUDIT | Ensure that MongoDB does not bypass authentication via the localhost exception | Report when no user exists"
+      when: discovered_2_2_users['transformed_output'] | int == 0
+      ansible.builtin.debug:
+        msg: "2.2 NOT APPLIED: no database user exists yet. Set the 2.1 admin first."
 
     - name: "2.2 | PATCH | Ensure that MongoDB does not bypass authentication via the localhost exception | Set enableLocalhostAuthBypass: false"
-      ansible.builtin.copy:
-        dest: "{{ mongodb8_cis_conf_path }}"
-        content: "{{ discovered_mongod_conf | combine(mongodb8_cis_2_2_settings, recursive=true) | to_nice_yaml(indent=2) }}"
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-      notify: Restart mongod
-
-    - name: "2.2 | PATCH | Ensure that MongoDB does not bypass authentication via the localhost exception | Update the parsed config"
+      when: discovered_2_2_users | int > 0
       ansible.builtin.set_fact:
-        discovered_mongod_conf: "{{ discovered_mongod_conf | combine(mongodb8_cis_2_2_settings, recursive=true) }}"
+        mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'setParameter': {'enableLocalhostAuthBypass': false}}, recursive=true) }}"

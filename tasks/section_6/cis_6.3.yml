@@ -9,34 +9,16 @@
     - audit
     - rule_6.3
     - scripting
-  vars:
-    mongodb8_cis_6_3_settings:
-      security:
-        javascriptEnabled: false
   block:
     - name: "6.3 | AUDIT | Ensure that server-side scripting is disabled if not needed | Report"
       ansible.builtin.debug:
         msg: >-
-          6.3 REVIEW: security.javascriptEnabled = {{ discovered_mongod_conf['security']['javascriptEnabled'] | default('not set (default true)') }}.
-          Site decision mongodb8_cis_javascript_needed = {{ mongodb8_cis_javascript_needed }}.
+          6.3 REVIEW: security.javascriptEnabled = {{ discovered_mongod_conf['security']['javascriptEnabled'] | default('not set (true)') }};
+          mongodb8_cis_javascript_needed = {{ mongodb8_cis_javascript_needed }}.
 
-    - name: "6.3 | PATCH | Ensure that server-side scripting is disabled if not needed | Set security.javascriptEnabled: false (site decision)"
-      when:
-        - not mongodb8_cis_javascript_needed
-        - discovered_mongod_conf['security']['javascriptEnabled'] | default(true) is not false
+    - name: "6.3 | PATCH | Ensure that server-side scripting is disabled if not needed | Set security.javascriptEnabled: false"
+      when: not mongodb8_cis_javascript_needed
+      ansible.builtin.set_fact:
+        mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'security': {'javascriptEnabled': false}}, recursive=true) }}"
       tags:
         - patch
-      block:
-        - name: "6.3 | PATCH | Ensure that server-side scripting is disabled if not needed | Write mongod.conf"
-          ansible.builtin.copy:
-            dest: "{{ mongodb8_cis_conf_path }}"
-            content: "{{ discovered_mongod_conf | combine(mongodb8_cis_6_3_settings, recursive=true) | to_nice_yaml(indent=2) }}"
-            owner: root
-            group: root
-            mode: "0644"
-            backup: true
-          notify: Restart mongod
-
-        - name: "6.3 | PATCH | Ensure that server-side scripting is disabled if not needed | Update the parsed config"
-          ansible.builtin.set_fact:
-            discovered_mongod_conf: "{{ discovered_mongod_conf | combine(mongodb8_cis_6_3_settings, recursive=true) }}"

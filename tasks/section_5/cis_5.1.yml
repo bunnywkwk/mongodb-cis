@@ -3,38 +3,13 @@
   when:
     - mongodb8_cis_rule_5_1
     - mongodb8_cis_level_1
-    - discovered_mongod_conf['auditLog']['destination'] | default('') | length == 0
+    - mongodb8_cis_conf['auditLog'] is not defined   # an existing auditLog is kept as it is
   tags:
     - level1
     - automated
     - patch
     - rule_5.1
     - logging
-  vars:
-    mongodb8_cis_5_1_settings:
-      auditLog: "{{ mongodb8_cis_audit_log }}"
-  block:
-    - name: "5.1 | PATCH | Ensure that system activity is audited | Check the site values"
-      ansible.builtin.assert:
-        that:
-          - mongodb8_cis_audit_log['destination'] | default('') in ['syslog', 'console', 'file']
-          - >-
-            mongodb8_cis_audit_log['destination'] != 'file'
-            or (mongodb8_cis_audit_log['format'] | default('') in ['JSON', 'BSON'] and mongodb8_cis_audit_log['path'] | default('') | length > 0)
-        fail_msg: >-
-          5.1: mongodb8_cis_audit_log.destination must be syslog, console or file; with file, also set format (JSON or BSON)
-          and path (found {{ mongodb8_cis_audit_log | to_json }}).
-
-    - name: "5.1 | PATCH | Ensure that system activity is audited | Set auditLog"
-      ansible.builtin.copy:
-        dest: "{{ mongodb8_cis_conf_path }}"
-        content: "{{ discovered_mongod_conf | combine(mongodb8_cis_5_1_settings, recursive=true) | to_nice_yaml(indent=2) }}"
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-      notify: Restart mongod
-
-    - name: "5.1 | PATCH | Ensure that system activity is audited | Update the parsed config"
-      ansible.builtin.set_fact:
-        discovered_mongod_conf: "{{ discovered_mongod_conf | combine(mongodb8_cis_5_1_settings, recursive=true) }}"
+  ansible.builtin.set_fact:
+    mongodb8_cis_conf: "{{ mongodb8_cis_conf | combine({'auditLog': mongodb8_cis_audit_log}) }}"
+    

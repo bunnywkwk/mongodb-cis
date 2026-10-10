@@ -11,6 +11,5 @@
     - patching
   ansible.builtin.debug:
     msg: >-
-      1.1 REVIEW: installed MongoDB server {{ discovered_mongodb_version }}. Compare with the latest
-      {{ mongodb8_cis_version }}.x release and the security alerts at https://www.mongodb.com/alerts.
-      The role never upgrades automatically.
+      1.1 REVIEW: MongoDB {{ discovered_mongodb_version }} is installed. Compare it with the latest {{ mongodb8_cis_version }}.x
+      release and https://www.mongodb.com/alerts. The role never upgrades.

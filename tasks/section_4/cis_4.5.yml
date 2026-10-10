@@ -12,9 +12,6 @@
   ansible.builtin.debug:
     msg: >-
       4.5 {{ 'PASS' if discovered_mongod_conf['security']['enableEncryption'] | default(false) | bool else 'REVIEW' }}:
-      security.enableEncryption = {{ discovered_mongod_conf['security']['enableEncryption'] | default('not set (false)') }};
-      key management: {{ 'KMIP ' ~ discovered_mongod_conf['security']['kmip']['serverName']
-      if discovered_mongod_conf['security']['kmip']['serverName'] is defined
-      else ('keyfile ' ~ discovered_mongod_conf['security']['encryptionKeyFile']
-      if discovered_mongod_conf['security']['encryptionKeyFile'] is defined else 'none') }}.
-      CIS recommends KMIP; a local keyfile is the other option.
+      security.enableEncryption = {{ discovered_mongod_conf['security']['enableEncryption'] | default(false) }},
+      key: {{ discovered_mongod_conf['security']['kmip'] | default(discovered_mongod_conf['security']['encryptionKeyFile'] | default('none')) }}.
+      CIS recommends KMIP. Enabling it is done by hand: docs/manual-remediation.md 4.5.

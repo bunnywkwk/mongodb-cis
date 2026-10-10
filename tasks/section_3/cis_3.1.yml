@@ -9,18 +9,15 @@
     - audit
     - rule_3.1
     - authorization
-  vars:
-    mongodb8_cis_3_1_roles: [dbOwner, userAdmin, userAdminAnyDatabase]
   block:
-    - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Find dbOwner, userAdmin, userAdminAnyDatabase in admin"
+    - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Find accounts with dbOwner, userAdmin or userAdminAnyDatabase in admin"
       community.mongodb.mongodb_shell:
         eval: >-
-          db.getSiblingDB('admin').system.users.find({'roles.role': {$in: ['dbOwner', 'userAdmin', 'userAdminAnyDatabase']},
-          'roles.db': 'admin'}, {_id: 1, roles: 1}).toArray()
+          db.getSiblingDB('admin').system.users.find({roles: {$elemMatch: {db: 'admin',
+          role: {$in: ['dbOwner', 'userAdmin', 'userAdminAnyDatabase']}}}}, {_id: 1, user: 1, db: 1}).toArray()
         transform: json
       register: discovered_3_1_users
       changed_when: false
-      check_mode: false
 
     - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Report"
       ansible.builtin.debug:
@@ -28,17 +25,14 @@
           3.1 {{ 'PASS' if discovered_3_1_users['transformed_output'] | length == 0 else 'REVIEW' }}:
           accounts with dbOwner, userAdmin or userAdminAnyDatabase in admin:
           {{ discovered_3_1_users['transformed_output'] | map(attribute='_id') | join(', ') or 'none' }}.
-          CIS: drop these roles (list an account in mongodb8_cis_revoke_admin_roles to let the role do it).
 
-    # CIS remediation: drop these roles. Only for the accounts the site lists (site decision); the account itself stays.
+    # CIS remediation: drop these roles. Only from the accounts the site lists; the account itself stays.
     - name: "3.1 | PATCH | Ensure least privilege for database accounts | Revoke the roles from the listed accounts"
-      when:
-        - item['_id'] in mongodb8_cis_revoke_admin_roles
-        - item['roles'] | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | length > 0
+      when: item['_id'] in mongodb8_cis_revoke_admin_roles
       community.mongodb.mongodb_shell:
         eval: >-
-          db.getSiblingDB({{ item['_id'].split('.')[0] | to_json }}).revokeRolesFromUser({{ item['_id'].split('.', 1)[1] | to_json }},
-          {{ item['roles'] | selectattr('db', 'equalto', 'admin') | selectattr('role', 'in', mongodb8_cis_3_1_roles) | list | to_json }})
+          db.getSiblingDB({{ item['db'] | to_json }}).revokeRolesFromUser({{ item['user'] | to_json }}
+          [{role: 'dbOwner', db: 'admin'}, {role: 'userAdmin', db: 'admin'}, role: 'userAdminAnyDatabase', db: 'admin'])
       loop: "{{ discovered_3_1_users['transformed_output'] }}"
       loop_control:
         label: "{{ item['_id'] }}"

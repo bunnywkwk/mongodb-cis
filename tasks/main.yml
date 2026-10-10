@@ -20,8 +20,8 @@
       login_user: "{{ mongodb8_cis_admin_user if mongodb8_cis_shell_auth else omit }}"
       login_password: "{{ mongodb8_cis_admin_password if mongodb8_cis_shell_auth else omit }}"
       tls: "{{ mongodb8_cis_shell_tls }}"
-      ssl_ca_certs: "{{ mongodb8_cis_shell_ca_file if mongodb8_cis_shell_tls and mongodb8_cis_shell_ca_file | length > 0 else omit }}"
-      ssl_keyfile: "{{ mongodb8_cis_shell_client_cert if mongodb8_cis_shell_tls and mongodb8_cis_shell_client_cert | length > 0 else omit }}"
+      ssl_ca_certs: "{{ mongodb8_cis_shell_ca_file if mongodb8_cis_shell_tls else omit }}"
+      ssl_keyfile: "{{ mongodb8_cis_shell_client_cert if mongodb8_cis_shell_tls else omit }}"
       # The role talks to its own mongod on this host; certificates are usually issued for the FQDN, not this address.
       additional_args: "{{ {'tlsAllowInvalidHostnames': true} if mongodb8_cis_shell_tls else omit }}"
   block:
@@ -61,3 +61,9 @@
     - selinux_policy
   ansible.builtin.import_tasks:
     file: selinux.yml
+
+- name: Write mongod.conf
+  ansible.builtin.import_tasks:
+    file: post.yml
+  tags:
+    - always
