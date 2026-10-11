@@ -1,64 +1,61 @@
-# Summary — what `mongodb8_cis` does for each CIS recommendation
+# mongodb8_cis: coverage summary
 
-CIS MongoDB 8 Benchmark v2.0.0, all 23 recommendations, in benchmark order. **Why** = the benchmark's Rationale, in
-short. **Role** = what the role does. **Default** = what happens without any setting.
+Ansible role that hardens MongoDB 8.0 Enterprise on RHEL 8, 9 and 10 to the CIS MongoDB 8 Benchmark v2.0.0.
+All 23 recommendations are implemented, one task file per recommendation.
 
-**Type:** A = Automated, M = Manual. **Role:** 🔧 PATCH (fixes it) · 🔧? DECISION (reports; fixes only if you set the
-variable) · 📋 REPORT (a person decides) · ➖ not applicable on a standalone mongod.
-**Default:** ✅ on · ⚠️ off by default because it can lock users out or break clients (turn it on with your values).
+## Coverage matrix
 
-| ID | L | Type | Recommendation | Why (CIS rationale) | Role | Default | Your switch / value |
-|----|---|------|----------------|---------------------|------|---------|---------------------|
-| **1** | | | **Installation and Patching** | | | | |
-| 1.1 | 1 | M | Appropriate version/patches installed | Current, supported, patched software limits known vulnerabilities | 📋 reports the installed version; never upgrades | ✅ | — |
-| **2** | | | **Authentication** | | | | |
-| 2.1 | 1 | A | Authentication is configured | Without authentication anyone can reach the data and actions can't be traced to a user | 🔧 creates the admin (`root@admin`), then `security.authorization: enabled` | ⚠️ | `mongodb8_cis_rule_2_1`, `_admin_user`, `_admin_password` |
-| 2.2 | 1 | A | No auth bypass via the localhost exception | The exception lets a local connection in without a username/password | 🔧 checks a user exists, then `enableLocalhostAuthBypass: false` | ⚠️ | `mongodb8_cis_rule_2_2` |
-| 2.3 | 2 | A | Authentication in the sharded cluster | Cluster members must prove who they are (key or certificate) | ➖ N/A on a standalone; 🔧 on cluster members: x509 member authentication | ⚠️ off | `mongodb8_cis_rule_2_3` |
-| **3** | | | **Authorization** | | | | |
-| 3.1 | 1 | M | Least privilege for database accounts | Roles that can grant any privilege belong only to administrators | 🔧? lists accounts with `dbOwner`/`userAdmin`/`userAdminAnyDatabase` in admin; revokes them from accounts you list | ✅ report | `mongodb8_cis_revoke_admin_roles: ["admin.<user>"]` |
-| 3.2 | 1 | M | Role-based access control enabled and configured | Access is controlled through roles, not individual grants | 🔧? shows authorization state + every user's roles; `mongodb8_cis_users` creates accounts and adds missing roles | ✅ | `mongodb8_cis_users` |
-| 3.3 | 1 | M | Non-privileged, dedicated service account | A non-root account limits what a compromised database can reach on the OS | 📋 PASS if mongod doesn't run as root (RPM default: `mongod`) | ✅ | — |
-| 3.4 | 1 | M | Each role is needed and grants only necessary privileges | Roles and privileges pile up over time and are no longer needed | 🔧? lists every custom role and its actions; drops the roles you list | ✅ report | `mongodb8_cis_drop_custom_roles: ["<db>.<role>"]` |
-| 3.5 | 2 | M | Review superuser/admin roles | Fewer admin accounts, less chance of unwanted privileged access | 🔧? lists users with `root`, `*AnyDatabase`, `clusterAdmin`, …; revokes them from accounts you list (never the role's own admin) | ✅ report | `mongodb8_cis_revoke_superuser_roles: ["<db>.<user>"]` |
-| **4** | | | **Data Encryption** (4.3 runs first: mongod refuses TLS options without TLS, D25) | | | | |
-| 4.1 | 2 | A | Legacy TLS protocols disabled | TLS 1.0 is banned by PCI DSS; newer versions are stronger | 🔧 adds `TLS1_0,TLS1_1` to `disabledProtocols` (needs TLS on) | ✅ | — |
-| 4.2 | 1 | A | Weak protocols disabled | TLS 1.0 is open to BEAST; TLS 1.1 has no authenticated encryption | 🔧 same setting as 4.1 (CIS lists it twice) | ✅ | — |
-| 4.3 | 1 | A | Encryption of data in transit (TLS) | Stops sniffing of cleartext traffic and man-in-the-middle attacks | 🔧 copies the server cert + key and the CA cert to `/etc/pki/mongodb/`, then `net.tls.mode: requireTLS` | ✅ (NOT APPLIED until the files are given) | `mongodb8_cis_rule_4_3`, `_tls_certificate_key_src`, `_tls_ca_src` |
-| 4.4 | 2 | A | FIPS is enabled | FIPS is the standard for how data is encrypted | 🔧 `net.tls.FIPSMode: true` (needs TLS) | ⚠️ | `mongodb8_cis_rule_4_4` |
-| 4.5 | 2 | M | Encryption of data at rest | Stolen disks or backups can't be read without the master key | 📋 shows encryption + key management; enabling it is done by hand ([why](manual-remediation.md#45-encryption-of-data-at-rest)) | ✅ | — |
-| **5** | | | **Audit Logging** | | | | |
-| 5.1 | 1 | A | System activity is audited | Logs are needed to troubleshoot and to investigate incidents | 🔧 adds `auditLog` if missing (syslog); never changes an existing one | ✅ | `mongodb8_cis_audit_log: {destination: syslog}` |
-| 5.2 | 2 | M | Audit filters configured properly | The audit trail must record what the organisation needs to trace incidents | 🔧? shows the filter (none = everything); writes yours | ✅ report | `mongodb8_cis_audit_filter: '<filter>'` |
-| 5.3 | 2 | A | Logging captures as much as possible | `quiet` hides details needed for troubleshooting and investigations | 🔧 writes `systemLog.quiet: false` | ✅ | — |
-| 5.4 | 2 | A | New entries appended to the log | Overwriting the log can destroy old entries that are still needed | 🔧 `systemLog.logAppend: true` (fresh install already compliant) | ✅ | — |
-| **6** | | | **Operating System Hardening** | | | | |
-| 6.1 | 1 | A | Non-default port | Automated attacks and scanners look for standard ports | 🔧 checks your port, labels it for SELinux, sets `net.port` | ⚠️ | `mongodb8_cis_rule_6_1`, `mongodb8_cis_port` |
-| 6.2 | 2 | M | OS resource limits set | Limits stop one process from consuming too many system resources | 🔧? compares systemd limits with CIS values; writes a drop-in | ✅ report | `mongodb8_cis_fix_resource_limits: true` (+ `_resource_limits`) |
-| 6.3 | 2 | M | Server-side scripting disabled if not needed | Unneeded scripting adds risk from insecure code | 🔧? shows `javascriptEnabled`; disables it on your word | ✅ report | `mongodb8_cis_javascript_needed: false` |
-| **7** | | | **File Permissions** | | | | |
-| 7.1 | 1 | M | Appropriate key file permissions | Protected keys and certificates prevent unauthorized access | 🔧? PASS/FAIL per key/cert/CA file (0600, owner mongod); fixes them | ✅ report | `mongodb8_cis_fix_key_file_permissions: true` |
-| 7.2 | 1 | M | Appropriate database file permissions | Restricts who can read the database files | 🔧? PASS/FAIL on dbPath (0770, owner mongod; RPM ships 0755); fixes it | ✅ report | `mongodb8_cis_fix_db_path_permissions: true` |
+Mode: **Apply** = the role applies the CIS setting. **On value** = the role reports, and applies the fix when the
+organization provides a value or list. **Report** = the role reports; a person decides.
 
-## Totals
+| ID | Level | Type | Recommendation | Mode | Organization provides |
+|----|-------|------|----------------|------|-----------------------|
+| 1.1 | 1 | Manual | Software version and patches | Report | |
+| 2.1 | 1 | Automated | Authentication is configured | Apply | Admin user and password |
+| 2.2 | 1 | Automated | No localhost authentication bypass | Apply | |
+| 2.3 | 2 | Automated | Authentication in the sharded cluster | Apply (cluster members only) | |
+| 3.1 | 1 | Manual | Least privilege for database accounts | On value | Accounts to revoke |
+| 3.2 | 1 | Manual | Role-based access control | On value | Accounts and roles |
+| 3.3 | 1 | Manual | Non-privileged service account | Report | |
+| 3.4 | 1 | Manual | Only necessary roles and privileges | On value | Roles to drop |
+| 3.5 | 2 | Manual | Review superuser and admin roles | On value | Accounts to revoke |
+| 4.1 | 2 | Automated | Legacy TLS protocols disabled | Apply | |
+| 4.2 | 1 | Automated | Weak protocols disabled | Apply | |
+| 4.3 | 1 | Automated | Encryption in transit (TLS) | Apply | Certificate files and their server paths |
+| 4.4 | 2 | Automated | FIPS mode enabled | Apply | |
+| 4.5 | 2 | Manual | Encryption at rest | Report | |
+| 5.1 | 1 | Automated | System activity audited | Apply | |
+| 5.2 | 2 | Manual | Audit filters configured | On value | Audit filter |
+| 5.3 | 2 | Automated | Logging captures maximum detail | Apply | |
+| 5.4 | 2 | Automated | Log entries appended | Apply | |
+| 6.1 | 1 | Automated | Non-default port | Apply | Port |
+| 6.2 | 2 | Manual | OS resource limits | Apply | |
+| 6.3 | 2 | Manual | Server-side scripting disabled | Apply | |
+| 7.1 | 1 | Manual | Key file permissions | Apply | |
+| 7.2 | 1 | Manual | Database file permissions | Apply | |
 
-| | Count | Rules |
-|---|---|---|
-| Recommendations | 23 | Level 1: 13 · Level 2: 10 |
-| 🔧 Role fixes (Automated) | 11 | 2.1, 2.2, 2.3, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1 (6 of them ⚠️ off by default; 2.3 N/A on a standalone) |
-| 🔧? Fixes on your decision | 9 | 3.1, 3.2, 3.4, 3.5, 5.2, 6.2, 6.3, 7.1, 7.2 (D31) |
-| 📋 Report only (a person decides) | 3 | 1.1, 3.3, 4.5 ([automation-decisions.md](automation-decisions.md)) |
+| Mode | Count | Recommendations |
+|------|-------|-----------------|
+| Apply | 15 | 2.1, 2.2, 2.3, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1, 6.2, 6.3, 7.1, 7.2 |
+| On value | 5 | 3.1, 3.2, 3.4, 3.5, 5.2 |
+| Report | 3 | 1.1, 3.3, 4.5 |
 
-**Fully compliant run:** Level 2 on, the ⚠️ rules on with their values, the 🔧? variables set, and the 📋 items reviewed
-by a person. Proof: [compliance-test.md](compliance-test.md). Example settings: `sysconfig/group_vars/mongodb.yml` in the
-test project.
+## Key points
 
-## Status (2026-10-06, branch `main`)
+- Every recommendation is enabled by default. An organization disables what it cannot accept; that list is its
+  compliance exception list.
+- A recommendation that needs a value that has not been provided reports "NOT APPLIED" and the run continues.
+- Configuration changes are collected and written to `mongod.conf` once, with a backup, followed by one restart.
+  A second run reports no changes.
+- TLS uses two files: the server certificate with its private key, and the CA certificate.
+- Encryption at rest (4.5) is enabled by hand: MongoDB cannot encrypt existing data, and key management is an
+  organizational decision.
+- Supported: MongoDB 8.0 only, the scope of the benchmark.
 
-| Item | State |
-|------|-------|
-| All 23 rules | implemented; lint (production) and `--syntax-check` clean |
-| Latest change | 3.4 drop list and 3.5 revoke list (with the admin guard): **accepted by the user** (D30) |
-| VM-tested | **compliance test passed on RHEL 8, 9 and 10, Level 2** (2026-10-06; [test-results.md](test-results.md)). Not yet on a real mongod: the 3.1/3.4/3.5 revoke and drop lists with entries |
-| Next | compliance test per VM ([compliance-test.md](compliance-test.md)), opt-in tests in [session-handoff.md](session-handoff.md) section 3 |
+## Test status
 
+| Test | Result |
+|------|--------|
+| Compliance test, RHEL 8/9/10, Level 2, 2026-10-06 (previous version of the role) | Passed, no failures |
+| Lint and syntax check, current version | Clean |
+| Compliance test, current version | Pending |

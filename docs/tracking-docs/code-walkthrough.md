@@ -201,10 +201,8 @@ Each DB read is `mongodb_shell` with `changed_when: false` and `check_mode: fals
 
 ---
 
-## 9. `handlers/main.yml`: one restart, then a check
+## 9. `handlers/main.yml`: one restart
 
-Both handlers listen to `Restart mongod`. They run **once**, at the end, and only if a PATCH changed something:
-1. restart mongod (`daemon_reload: true`, so a 6.2 drop-in is read);
-2. wait up to 60 s until it accepts connections on its (possibly new) address and port.
-
-If a config change broke mongod, the run fails **here**, right after the change. mongod has no config dry-run, so this is the check (D7).
+One handler, `Restart mongod`. It runs **once**, at the end, and only if a PATCH changed something. `daemon_reload: true`
+makes systemd read the 6.2 drop-in. The wait-for-port check was removed 2026-10-10 (user: not needed); a mongod that
+fails to start shows in `systemctl status mongod` or at the next run.

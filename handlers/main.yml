@@ -1,14 +1,6 @@
 ---
-- name: Restart mongod service
-  listen: Restart mongod
+- name: Restart mongod
   ansible.builtin.systemd_service:
     name: "{{ mongodb8_cis_service }}"
     state: restarted
-    daemon_reload: true   # picks up systemd drop-ins written by the role (6.2)
-
-- name: Wait for mongod to accept connections
-  listen: Restart mongod
-  ansible.builtin.wait_for:
-    host: "{{ mongodb8_cis_listen_host }}"
-    port: "{{ mongodb8_cis_listen_port | int }}"
-    timeout: 60
+    daemon_reload: true   # picks up the 6.2 limits drop-in

@@ -9,7 +9,6 @@ Platforms: RHEL and compatible (Rocky, Alma, Oracle); standalone `mongod`, or a 
 ## Requirements
 
 - ansible-core **2.16.x** on the control node: the last version that can manage RHEL 8 (Python 3.6).
-  Setup: [`docs/control-node-setup.md`](docs/control-node-setup.md).
 - Collections: `ansible-galaxy collection install -r requirements.yml` (`community.mongodb`, `community.general` 11.x).
 - MongoDB Enterprise 8.0 installed, or `mongodb8_cis_install: true` (adds MongoDB's Enterprise repo and installs it).
 
@@ -85,8 +84,9 @@ Empty = report only. The names come from the rule's own report.
 | 5.1 | `mongodb8_cis_audit_log` | `{destination: file, format: BSON, path: /var/log/mongodb/auditLog.bson}` (default `syslog`) |
 | 5.2 | `mongodb8_cis_audit_filter` | `'{ atype: { $in: [ "authenticate", "createUser", "dropUser" ] } }'` |
 
-Report only (a person decides): 1.1 version and patches, 3.3 service account, 4.5 encryption at rest.
-Hand fixes: [`docs/manual-remediation.md`](docs/manual-remediation.md).
+Report only (a person decides): 1.1 version and patches (upgrade in a change window), 3.3 service account (the RPM
+already runs mongod as `mongod`), 4.5 encryption at rest (enable it by hand on a new install, MongoDB's
+[Configure Encryption](https://www.mongodb.com/docs/manual/tutorial/configure-encryption/)).
 
 ## Run one rule, skip one rule
 
@@ -107,13 +107,10 @@ mongosh --port 27100 --tls --tlsCAFile /etc/pki/mongodb/ca.pem \
   --eval 'db.adminCommand({getCmdLineOpts: 1}).parsed'      # what mongod runs with
 ```
 
-How to prove a host is compliant, rule by rule: [`docs/compliance-test.md`](docs/compliance-test.md).
-
 ## Layout
 
 `tasks/main.yml` → `prelim.yml` (checks, opt-in `install.yml`, reads `mongod.conf`) → `section_1..7/` (one file per CIS
-rule; config rules add their setting to one fact) → `post.yml` (writes `mongod.conf` once). Design decisions, platform
-facts and test evidence: [`docs/`](docs/).
+rule; config rules add their setting to one fact) → `post.yml` (writes `mongod.conf` once).
 
 ## License
 

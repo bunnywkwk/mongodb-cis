@@ -6,9 +6,6 @@
 # Add the MongoDB Enterprise repo and install MongoDB; false = harden an existing install only
 mongodb8_cis_install: false
 
-# Release series; only "8.0" (CIS MongoDB 8)
-mongodb8_cis_version: "8.0"
-
 ## Profiles
 
 mongodb8_cis_level_1: true
@@ -114,7 +111,7 @@ mongodb8_cis_shell_client_cert_path: ""   # where it goes on the server, e.g. /e
 # WARNING: needs TLS (4.3); turns off SCRAM-SHA-1 and non-FIPS ciphers
 mongodb8_cis_rule_4_4: true
 
-# 4.5 Report encryption at rest (enabling it is done by hand: docs/manual-remediation.md)
+# 4.5 Report encryption at rest (enabling it is done by hand, on a new install)
 mongodb8_cis_rule_4_5: true
 
 ## Section 5: Audit Logging

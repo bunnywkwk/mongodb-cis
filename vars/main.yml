@@ -3,7 +3,7 @@
 
 ## Supported targets
 mongodb8_cis_supported_os_majors: ["8", "9", "10"]
-mongodb8_cis_supported_versions: ["8.0"]   # CIS MongoDB 8 Benchmark v2.0.0
+mongodb8_cis_version: "8.0"   # the release series the CIS MongoDB 8 Benchmark v2.0.0 covers
 
 ## MongoDB Enterprise package (MongoDB's install docs)
 mongodb8_cis_repo_name: "mongodb-enterprise-{{ mongodb8_cis_version }}"
@@ -17,12 +17,10 @@ mongodb8_cis_service: mongod
 mongodb8_cis_conf_path: /etc/mongod.conf
 mongodb8_cis_limits_dropin: /etc/systemd/system/mongod.service.d/mongodb8_cis-limits.conf   # 6.2
 mongodb8_cis_default_db_path: /var/lib/mongo
-mongodb8_cis_default_log_path: /var/log/mongodb/mongod.log
-mongodb8_cis_default_user: mongod
+mongodb8_cis_service_user: mongod   # the account the RPM creates and runs mongod as (3.3 checks it)
 
 ## Found on the host (prelim)
 discovered_mongodb_version: "{{ ansible_facts['packages'][mongodb8_cis_server_package][0]['version'] }}"
-mongodb8_cis_service_user: "{{ discovered_mongod_service['status']['User'] | default(mongodb8_cis_default_user, true) }}"
 
 ## TLS (4.3): TLS is turned on in this run when the rule is on and both files have a source and a destination
 mongodb8_cis_tls_ready: >-
@@ -34,8 +32,6 @@ mongodb8_cis_tls_ready: >-
 mongodb8_cis_tls_enabled: "{{ mongodb8_cis_conf['net']['tls']['mode'] | default('disabled') != 'disabled' }}"   # 4.1, 4.2, 4.4
 mongodb8_cis_cluster_member: >-
   {{ mongodb8_cis_conf['sharding']['clusterRole'] is defined or mongodb8_cis_conf['replication']['replSetName'] is defined }}
-mongodb8_cis_listen_port: "{{ mongodb8_cis_conf['net']['port'] | default(27017) }}"   # restart handler
-mongodb8_cis_listen_host: "{{ (mongodb8_cis_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"
 
 ## The role's own login (sections 2, 3): the config mongod runs with now, before this run's restart
 mongodb8_cis_shell_host: "{{ (discovered_mongod_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"

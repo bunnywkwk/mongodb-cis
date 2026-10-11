@@ -126,23 +126,15 @@ Checks and discovery that every rule needs.
 
 ```yaml
 ---
-- name: "PRELIM | AUDIT | Gather minimal facts if the play skipped them"
-  when: ansible_facts['os_family'] is not defined
-  ansible.builtin.setup:
-    gather_subset:
-      - min
-
-- name: "PRELIM | AUDIT | Check ansible-core, OS and MongoDB version"
+- name: "PRELIM | AUDIT | Check ansible-core and OS"
   ansible.builtin.assert:
     that:
       - ansible_version.full is version('2.16.1', '>=')
       - ansible_facts['os_family'] == 'RedHat'
       - ansible_facts['distribution_major_version'] in mongodb8_cis_supported_os_majors
-      - mongodb8_cis_version in mongodb8_cis_supported_versions
     fail_msg: >-
-      Needs ansible-core >= 2.16.1, RHEL-family {{ mongodb8_cis_supported_os_majors | join('/') }} and
-      mongodb8_cis_version {{ mongodb8_cis_supported_versions | join(', ') }}. Found ansible-core {{ ansible_version.full }},
-      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}, mongodb8_cis_version {{ mongodb8_cis_version }}.
+      Needs ansible-core >= 2.16.1 and RHEL-family {{ mongodb8_cis_supported_os_majors | join('/') }}.
+      Found ansible-core {{ ansible_version.full }}, {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
 
 - name: "PRELIM | PATCH | Install MongoDB"
   when: mongodb8_cis_install
@@ -907,7 +899,8 @@ Imports section 4. 4.3 first: the other TLS rules need TLS on.
       4.5 {{ 'PASS' if discovered_mongod_conf['security']['enableEncryption'] | default(false) | bool else 'REVIEW' }}:
       security.enableEncryption = {{ discovered_mongod_conf['security']['enableEncryption'] | default(false) }},
       key: {{ discovered_mongod_conf['security']['kmip'] | default(discovered_mongod_conf['security']['encryptionKeyFile'] | default('none')) }}.
-      CIS recommends KMIP. Enabling it is done by hand: docs/manual-remediation.md 4.5.
+      CIS recommends KMIP. Enable it by hand on a new install (MongoDB cannot encrypt existing data):
+      https://www.mongodb.com/docs/manual/tutorial/configure-encryption/
 ```
 
 ### `tasks/section_5/main.yml`
