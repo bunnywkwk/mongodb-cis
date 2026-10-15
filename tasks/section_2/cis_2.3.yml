@@ -9,6 +9,9 @@
     - patch
     - rule_2.3
     - authentication
+  vars:
+    mongodb8_cis_cluster_member: >-
+      {{ mongodb8_cis_conf['sharding']['clusterRole'] is defined or mongodb8_cis_conf['replication']['replSetName'] is defined }}
   block:
     - name: "2.3 | AUDIT | Ensure authentication is enabled in the sharded cluster | Report a standalone"
       when: not mongodb8_cis_cluster_member

@@ -28,6 +28,10 @@
     - name: "PRELIM | AUDIT | Stop when MongoDB is not installed | End this host"
       ansible.builtin.meta: end_host
 
+- name: "PRELIM | AUDIT | Get the installed MongoDB version"
+  ansible.builtin.set_fact:
+    discovered_mongodb_version: "{{ ansible_facts['packages'][mongodb8_cis_server_package][0]['version'] }}"
+
 - name: "PRELIM | AUDIT | Check the installed MongoDB is 8.0"
   ansible.builtin.assert:
     that:
@@ -44,6 +48,24 @@
   ansible.builtin.set_fact:
     discovered_mongod_conf: "{{ discovered_mongod_conf_raw['content'] | b64decode | from_yaml | default({}, true) }}"
     mongodb8_cis_conf: "{{ discovered_mongod_conf_raw['content'] | b64decode | from_yaml | default({}, true) }}"
+
+# The role's own login (sections 2, 3): the config mongod runs with now, before this run's restart.
+- name: "PRELIM | AUDIT | Work out how the role logs in to mongod"
+  ansible.builtin.set_fact:
+    mongodb8_cis_shell_host: "{{ (discovered_mongod_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"
+    mongodb8_cis_shell_port: "{{ discovered_mongod_conf['net']['port'] | default(27017) }}"
+    mongodb8_cis_shell_auth: "{{ discovered_mongod_conf['security']['authorization'] | default('disabled') == 'enabled' }}"
+    mongodb8_cis_shell_tls: "{{ discovered_mongod_conf['net']['tls']['mode'] | default('disabled') == 'requireTLS' }}"
+    mongodb8_cis_shell_ca_file: "{{ discovered_mongod_conf['net']['tls']['CAFile'] | default('') }}"
+    mongodb8_cis_shell_client_cert: >-
+      {{ mongodb8_cis_shell_client_cert_path
+         if mongodb8_cis_shell_tls_certificate_key_src | length > 0 and mongodb8_cis_shell_client_cert_path | length > 0
+         else discovered_mongod_conf['net']['tls']['certificateKeyFile'] | default('') }}
+    # 4.3 turns TLS on in this run when the rule is on and both files have a source and a destination (2.3 needs it too).
+    mongodb8_cis_tls_ready: >-
+      {{ mongodb8_cis_section4 and mongodb8_cis_rule_4_3 and mongodb8_cis_level_1
+         and mongodb8_cis_tls_certificate_key_src | length > 0 and mongodb8_cis_tls_ca_src | length > 0
+         and mongodb8_cis_tls_certificate_key_file | length > 0 and mongodb8_cis_tls_ca_file | length > 0 }}
 
 # mongodb_shell passes the password on the command line without quotes.
 - name: "PRELIM | AUDIT | Check the admin login values"

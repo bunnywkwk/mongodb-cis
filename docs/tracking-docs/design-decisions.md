@@ -586,6 +586,29 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
   (`main.yml` calling 4.5 early, or a CIS step inside `install.yml`). The user preferred the plain Lockdown layout; CIS
   marks 4.5 Manual, so report only is still compliant. Key management (KMIP/keyfile) is the organization's design anyway.
 
+## D35. `vars/main.yml` holds fixed values only (2026-10-14, user)
+
+- **Decision:** `vars/main.yml` keeps only constants (supported OS, repo URL, package names, RPM paths, service user,
+  SELinux default ports). Values worked out from the host or from other settings moved next to where they're found or used:
+
+  | Value | Was | Now | Why there |
+  |-------|-----|-----|-----------|
+  | `discovered_mongodb_version` | `vars/` | `prelim.yml` `set_fact` | a discovery; prelim makes the discoveries (Lockdown) |
+  | 6 x `mongodb8_cis_shell_*` (role login) | `vars/` | `prelim.yml` `set_fact`, after "Parse mongod.conf" | built from the config mongod runs with now (D24) |
+  | `mongodb8_cis_tls_ready` | `vars/` | same `prelim.yml` `set_fact` | built from user settings only; 2.3 and 4.3 both need it |
+  | `mongodb8_cis_cluster_member` | `vars/` | `vars:` of the 2.3 block | only 2.3 uses it |
+  | `mongodb8_cis_tls_enabled` | `vars/` | `vars:` of the section 4 import in `tasks/main.yml` | must be **recomputed on each use**: 4.3 sets TLS in `mongodb8_cis_conf` before 4.1/4.2/4.4 run, and a `set_fact` would freeze the old value |
+
+- **Why:** a reader of `vars/` expects constants; formulas there sent them across files to see what a rule checks.
+  No variable renamed, no rule condition changed, `defaults/` untouched.
+- **Leaner options weighed:** inline the expressions in each `when:` (`tls_enabled` 3 copies, the login 6 lines in
+  `module_defaults`): more duplication. A new `tasks/facts.yml`: an extra file for what prelim already does. Not adopted.
+- **Tested:** `yamllint .` and `ansible-lint` (production) pass; scratch playbook on ansible-core 2.16.19 runs the
+  moved prelim tasks with three fake `mongod.conf` files (fresh, fresh + certificate settings, hardened replica set):
+  login values and `tls_ready` come out as booleans (`type_debug` = `bool`), `when: mongodb8_cis_tls_ready` follows the value,
+  `tls_enabled` turns `True` after a 4.3-style `combine`, `cluster_member` is `True` only with `replSetName`.
+  Not yet on a VM: expect the same recap (rerun `changed=0`).
+
 ## Not adopted
 
 - **Lockdown's Goss audit framework** (`setup_audit`, `run_audit`, `audit_only`, L3): it adds an extra tool and binary to maintain. The AUDIT steps plus `--check --diff` already give a read-only compliance view.

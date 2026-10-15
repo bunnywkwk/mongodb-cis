@@ -82,7 +82,7 @@ Recurring words:
 | `meta/main.yml` | Name `bunnywkwk.mongodb8_cis`, EL 8/9/10, `min_ansible_version: "2.16.1"`, `collections:` | 2.16.1 = Lockdown's floor and the only ansible-core that runs on RHEL 8 (D15) |
 | `requirements.yml` | `community.mongodb` (only `mongodb_shell` is used), `community.general` 11.x | Installed on the **control node**; nothing extra on the DB servers (D13). Keep it: users and ansible-lint install from it |
 | `defaults/main.yml` | **Every** switch and site value, with comments | Users override them in `group_vars`, never by editing tasks. Write `true`/`false` unquoted (D19) |
-| `vars/main.yml` | Internal values: repo URL, package names, RPM default paths, values computed from the live config | Not for users. Paths come from the live config; RPM defaults are only fallbacks (D8) |
+| `vars/main.yml` | Fixed internal values only: supported OS, repo URL, package names, RPM default paths, SELinux default ports | Not for users. Values worked out from the host are set in tasks (D35); RPM defaults are only fallbacks (D8) |
 | `.yamllint`, `.ansible-lint` | Lint rules (`production` profile) | Run lint inside the role folder |
 | `files/selinux/` | MongoDB's own SELinux module sources (GPL-2.0) | Only for the optional extra (section 8 below) |
 
@@ -113,8 +113,10 @@ changes the port or turns on TLS.
 | Install (if `mongodb8_cis_install`) | Runs `install.yml` (section 6 below) | Before detection, so detection sees the result |
 | Detect `mongodb-enterprise-server` | Installed? Which version? | Detect, don't assume |
 | Not installed → stop this host | Message + `end_host` | Clean skip, not a failure |
+| Get the installed version | `discovered_mongodb_version` from package facts | Used by the check below and 1.1 (D35) |
 | Check the installed version is 8.0.x | Stops on 7.x / 9.x | Wrong benchmark otherwise (D22) |
 | Read + parse `/etc/mongod.conf` | → `discovered_mongod_conf`, plus a copy of the **running** config | The shared AUDIT for all config rules (D7, D14) |
+| Work out how the role logs in | `mongodb8_cis_shell_*` (host, port, auth, TLS, CA, client cert) + `mongodb8_cis_tls_ready` | From the running config, once; used by the sections 2/3 `module_defaults`, 2.3, 4.3 (D24, D35) |
 | No deprecated `net.ssl` block | Stops before Section 4 | mongod refuses `net.ssl` and `net.tls` together |
 | Database login values | If authorization is already on, user/password must be set; password without spaces/quotes | Sections 2/3 must be able to log in |
 | Read the mongod service | User, PID, limits (read-only) | Used by 3.3, 6.2, 7.x and the report |

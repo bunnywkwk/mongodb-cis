@@ -37,6 +37,8 @@
 
 - name: Run section 4 - Data Encryption
   when: mongodb8_cis_section4
+  vars:
+    mongodb8_cis_tls_enabled: "{{ mongodb8_cis_conf['net']['tls']['mode'] | default('disabled') != 'disabled' }}"   # 4.1, 4.2, 4.4
   ansible.builtin.import_tasks:
     file: section_4/main.yml
 

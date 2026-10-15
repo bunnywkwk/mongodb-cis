@@ -1,5 +1,6 @@
 ---
-# mongodb8_cis internal values: worked out by the role, not set by users (their choices are in defaults/main.yml).
+# mongodb8_cis internal fixed values (not set by users; their choices are in defaults/main.yml). Values worked out
+# from the host are set in tasks (prelim.yml, or the rule that uses them).
 
 ## Supported targets
 mongodb8_cis_supported_os_majors: ["8", "9", "10"]
@@ -18,31 +19,6 @@ mongodb8_cis_conf_path: /etc/mongod.conf
 mongodb8_cis_limits_dropin: /etc/systemd/system/mongod.service.d/mongodb8_cis-limits.conf   # 6.2
 mongodb8_cis_default_db_path: /var/lib/mongo
 mongodb8_cis_service_user: mongod   # the account the RPM creates and runs mongod as (3.3 checks it)
-
-## Found on the host (prelim)
-discovered_mongodb_version: "{{ ansible_facts['packages'][mongodb8_cis_server_package][0]['version'] }}"
-
-## TLS (4.3): TLS is turned on in this run when the rule is on and both files have a source and a destination
-mongodb8_cis_tls_ready: >-
-  {{ mongodb8_cis_section4 and mongodb8_cis_rule_4_3 and mongodb8_cis_level_1
-     and mongodb8_cis_tls_certificate_key_src | length > 0 and mongodb8_cis_tls_ca_src | length > 0
-     and mongodb8_cis_tls_certificate_key_file | length > 0 and mongodb8_cis_tls_ca_file | length > 0 }}
-
-## From the config being built (mongodb8_cis_conf)
-mongodb8_cis_tls_enabled: "{{ mongodb8_cis_conf['net']['tls']['mode'] | default('disabled') != 'disabled' }}"   # 4.1, 4.2, 4.4
-mongodb8_cis_cluster_member: >-
-  {{ mongodb8_cis_conf['sharding']['clusterRole'] is defined or mongodb8_cis_conf['replication']['replSetName'] is defined }}
-
-## The role's own login (sections 2, 3): the config mongod runs with now, before this run's restart
-mongodb8_cis_shell_host: "{{ (discovered_mongod_conf['net']['bindIp'] | default('127.0.0.1')).split(',')[0] | replace('0.0.0.0', '127.0.0.1') }}"
-mongodb8_cis_shell_port: "{{ discovered_mongod_conf['net']['port'] | default(27017) }}"
-mongodb8_cis_shell_auth: "{{ discovered_mongod_conf['security']['authorization'] | default('disabled') == 'enabled' }}"
-mongodb8_cis_shell_tls: "{{ discovered_mongod_conf['net']['tls']['mode'] | default('disabled') == 'requireTLS' }}"
-mongodb8_cis_shell_ca_file: "{{ discovered_mongod_conf['net']['tls']['CAFile'] | default('') }}"
-mongodb8_cis_shell_client_cert: >-
-  {{ mongodb8_cis_shell_client_cert_path
-     if mongodb8_cis_shell_tls_certificate_key_src | length > 0 and mongodb8_cis_shell_client_cert_path | length > 0
-     else discovered_mongod_conf['net']['tls']['certificateKeyFile'] | default('') }}
 
 ## 6.1: ports the RHEL SELinux policy already allows for mongod (mongod_port_t)
 mongodb8_cis_selinux_default_ports: [27017, 27018, 27019, 28017, 28018, 28019]
