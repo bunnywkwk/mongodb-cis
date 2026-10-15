@@ -143,8 +143,8 @@ mongodb8_cis_javascript_needed: false
 
 # 7.1 Report key file permissions
 mongodb8_cis_rule_7_1: true
-mongodb8_cis_fix_key_file_permissions: true   # set keyFile / TLS key / CA files to 0600, owner mongod; false = report only
+mongodb8_cis_fix_key_file_permissions: true   # set keyFile / TLS key / CA files to 0600, owner mongod
 
 # 7.2 Report database file permissions
 mongodb8_cis_rule_7_2: true
-mongodb8_cis_fix_db_path_permissions: true   # set dbPath to 0770, owner mongod; false = report only
+mongodb8_cis_fix_db_path_permissions: true   # set dbPath to 0770, owner mongod
