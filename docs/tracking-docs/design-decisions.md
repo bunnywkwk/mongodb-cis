@@ -277,10 +277,10 @@ Origin: .../mongodb_cis/tasks/prelim.yml:39:9
 
 | ansible-core | `-e mongodb8_cis_install=` | Without `\| bool` | With `\| bool` |
 |--------------|---------------------------|--------------------|-----------------|
-| 2.20.7 (RHEL 9/10 env) | `true` | ❌ run stops with the error above | ✅ runs |
-| 2.20.7 | `false` | ❌ run stops with the error above | ✅ skipped |
-| 2.16.x (RHEL 8 env) | `true` | ⚠️ runs, only a deprecation warning | ✅ runs |
-| 2.16.x | `false` | 🚨 **runs**: printed `INSTALL WOULD RUN (value=false, type=str)` | ✅ skipped |
+| 2.20.7 (RHEL 9/10 env) | `true` | Fails: run stops with the error above | Runs |
+| 2.20.7 | `false` | Fails: run stops with the error above | Skipped |
+| 2.16.x (RHEL 8 env) | `true` | Warning: runs, only a deprecation warning | Runs |
+| 2.16.x | `false` | **Danger: runs**: printed `INSTALL WOULD RUN (value=false, type=str)` | Skipped |
 
 So without `| bool`, 2.20 breaks loudly, and 2.16 does **the opposite of what the user asked**, silently. In a hardening role, that could mean a disruptive rule running when someone explicitly set it to `false`.
 
@@ -288,8 +288,8 @@ So without `| bool`, 2.20 breaks loudly, and 2.16 does **the opposite of what th
 
 | Source of `flag` | 2.20.7 without `\| bool` | 2.16.19 without `\| bool` | Either version with `\| bool` |
 |------------------|---------------------------|----------------------------|--------------------------------|
-| YAML (`defaults/`, `group_vars/*.yml`, `inventory.yml`) | ✅ skipped | ✅ skipped | ✅ skipped |
-| INI inventory (`flag=false` in `inventory.ini`) | ❌ run stops | 🚨 **runs** (`flag=false, type=str`) | ✅ skipped |
+| YAML (`defaults/`, `group_vars/*.yml`, `inventory.yml`) | Skipped | Skipped | Skipped |
+| INI inventory (`flag=false` in `inventory.ini`) | Fails: run stops | **Danger: runs** (`flag=false, type=str`) | Skipped |
 
 So `| bool` changes **nothing** for real YAML booleans. It only matters when the value arrives as **text**:
 - `-e key=value`
@@ -479,13 +479,13 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
 
   | Rule | 1. Concrete fix | 2. Simple input | 3. Safe if wrong | 4. Worth it | Result |
   |------|-----------------|-----------------|------------------|-------------|--------|
-  | 1.1 | upgrade binaries (CIS: backup, stop, replace, restart) | version + change window | ❌ an upgrade restarts the database and can't be rolled back by the role | yes | report only |
-  | 2.3 | `clusterAuthMode: x509` on every cluster member | certificates per member | ❌ rolling restart of a whole cluster | ❌ no cluster: the role targets a standalone `mongod` | report N/A |
-  | 3.2 | ❌ "assign the **appropriate** roles" | ❌ 4–5 nested fields per account (D28 E3) | ❌ apps lose roles; login restrictions wiped (D28 E2) | — | report only |
-  | 3.3 | nothing on a fresh install (`User=mongod`, D28 E4) | — | ❌ re-owning files: one missed file and mongod won't start | ❌ already passes | report only |
-  | 3.4 | ❌ privileges the site picks per role | ❌ role + resource + actions per entry | ❌ an app loses an action it needs | ❌ no custom roles by default | report only |
-  | 3.5 | ❌ "**review**" admin roles | ❌ which admins are legitimate | ❌ admins locked out | — | report only |
-  | 4.5 | ❌ a procedure: master key, KMIP, rotation | ❌ key server design | ❌ **data loss**: existing data can't be encrypted in place; lost key = unreadable data ([manual-remediation.md](manual-remediation.md) 4.5, E1–E5) | — | report only |
+  | 1.1 | upgrade binaries (CIS: backup, stop, replace, restart) | version + change window | No: an upgrade restarts the database and can't be rolled back by the role | yes | report only |
+  | 2.3 | `clusterAuthMode: x509` on every cluster member | certificates per member | No: rolling restart of a whole cluster | No, no cluster: the role targets a standalone `mongod` | report N/A |
+  | 3.2 | No: "assign the **appropriate** roles" | No: 4–5 nested fields per account (D28 E3) | No: apps lose roles; login restrictions wiped (D28 E2) | — | report only |
+  | 3.3 | nothing on a fresh install (`User=mongod`, D28 E4) | — | No: re-owning files: one missed file and mongod won't start | No: already passes | report only |
+  | 3.4 | No: privileges the site picks per role | No: role + resource + actions per entry | No: an app loses an action it needs | No: no custom roles by default | report only |
+  | 3.5 | No: "**review**" admin roles | No: which admins are legitimate | No: admins locked out | — | report only |
+  | 4.5 | No: a procedure: master key, KMIP, rotation | No: key server design | No: **data loss**: existing data can't be encrypted in place; lost key = unreadable data ([manual-remediation.md](manual-remediation.md) 4.5, E1–E5) | — | report only |
 
 - **Why:** for these seven, automating means either guessing a value only the site's people know, or building a
   complex input that end users would get wrong, where a mistake costs an outage, a lockout or data. A clear report plus
@@ -532,9 +532,9 @@ So `| bool` changes **nothing** for real YAML booleans. It only matters when the
   | 3.2 | `mongodb8_cis_users: []` (user, db, password, roles) | creates listed accounts that don't exist; adds listed roles an account is missing | removing roles (3.1/3.5 lists do that), changing passwords, `authenticationRestrictions` |
   | 4.5 | `mongodb8_cis_encryption: {}` (written as-is under `security:`, like 5.1's `mongodb8_cis_audit_log`) | `enableEncryption: true` + the KMIP or keyfile settings, in `section_4/cis_4.5.yml` (imported from `main.yml` before mongod's first start), only when dbPath has no data | migrating existing data (hand procedure in manual-remediation.md); key creation (the site owns the key and its backup) |
 
-- **Why each passes D29's test now:** 1 ✅ CIS gives the setting (2.3 config lines, 3.2 *"assign the appropriate users
-  to each role"*, 4.5 `enableEncryption` + key management). 2 ✅ one switch / one list / one dict, using MongoDB's own
-  names. 3 ✅ nothing is removed: 2.3 only on cluster members, 3.2 only adds, 4.5 only on an empty dbPath. 4 ✅ a fresh
+- **Why each passes D29's test now:** 1 Yes CIS gives the setting (2.3 config lines, 3.2 *"assign the appropriate users
+  to each role"*, 4.5 `enableEncryption` + key management). 2 Yes one switch / one list / one dict, using MongoDB's own
+  names. 3 Yes nothing is removed: 2.3 only on cluster members, 3.2 only adds, 4.5 only on an empty dbPath. 4 Yes a fresh
   server fails all three.
 - **Scope note (2.3):** the CIS title says *sharded cluster*; replica set members use the same internal
   authentication and a shard is a replica set, so `sharding.clusterRole` **or** `replication.replSetName` = member.

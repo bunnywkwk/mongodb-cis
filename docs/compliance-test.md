@@ -13,7 +13,7 @@ rule by rule.
 | Hosts / OS | `rhel8-mongo`, `rhel9-mongo`, `rhel10-mongo` / `cat /etc/redhat-release` → |
 | MongoDB | `mongod --version` → |
 | Role | branch `main`, commit → (`git log --oneline -1` in the installed role) |
-| Settings | `mongodb8-cis-test/sysconfig/group_vars/mongodb.yml`: site values + Level 1/2 always; the FULL BENCHMARK block (risky rules, site decisions) commented for S2, uncommented for S4; TLS files from `lab_tls_*` |
+| Settings | `mongodb8-cis-test/sysconfig/group_vars/mongodb.yml`: site values (admin, certificate `_src` files, port), Level 1 + 2; risky rules are on by default (D33), so no block to uncomment |
 | Date / tester | |
 
 ## How `main` differs from the rebuild (what to expect)
@@ -35,10 +35,10 @@ CIS *Profile Definitions*: **Level 1** items are *"practical and prudent; provid
 inhibit the utility of the technology beyond acceptable means."* **Level 2** *"extends"* Level 1 for environments
 *"where security is paramount"* / *"defense in depth"*.
 
-So **Level 1 is the CIS baseline, not "the role's defaults"**. Four Level 1 rules (2.1, 2.2, 4.3, 6.1) need your values
-(admin, certificates, port) and can lock clients out, so the role ships them **off**. Running the role with defaults
-gives a safe but **not** Level 1 compliant host; turning those rules on with your values gives Level 1 compliance.
-This test uses Level 2 (all 23 rules), which includes Level 1.
+So **Level 1 is the CIS baseline**. Every rule is on by default, risky ones too (D33, revised 2026-10-10; they were off
+when the 2026-10-06 test ran). Four Level 1 rules (2.1, 2.2, 4.3, 6.1) also need your values (admin, certificates,
+port): without them they report `NOT APPLIED` and the host is **not** Level 1 compliant; with them it is. A rule you
+switch off in `group_vars` is a recorded exception. This test uses Level 2 (all 23 rules), which includes Level 1.
 
 | Profile | Rules | Compliant when |
 |---------|-------|----------------|
@@ -53,12 +53,14 @@ Fresh RHEL 8, 9 and 10 snapshots (no MongoDB). In `mongodb8-cis-test`, point the
 # requirements.yml: version: main   (back to mongodb8-cis-rebuild for the rebuild test)
 ansible-galaxy install -r requirements.yml -p roles --force                                   # S0 role = main
 ansible mongodb -m setup -a 'filter=ansible_distribution*'                                     # S1 real OS per host
-ansible-playbook playbooks/site.yml                                                           # S2 install, safe defaults (FULL BENCHMARK block commented)
-ansible-playbook playbooks/prep-tls.yml                                                        # S3 TLS files (lab_tls_* → /etc/pki/mongodb)
-# uncomment the FULL BENCHMARK block in sysconfig/group_vars/mongodb.yml
-ansible-playbook playbooks/site.yml --force-handlers                                          # S4 full benchmark
-ansible-playbook playbooks/site.yml                                                           # S5 rerun: changed=0
+ansible-playbook playbooks/site.yml                                                           # S2 install + full benchmark in one run
+ansible-playbook playbooks/site.yml                                                           # S3 rerun: changed=0
 ```
+
+**Revised 2026-10-15:** one run does it all. 4.3 copies the certificates from the control node (D32), so the test
+project's `prep-tls.yml` is gone, and risky rules are on by default (D33), so there's no FULL BENCHMARK block to
+uncomment and no `--force-handlers`. The 2026-10-06 record used the old steps (S2 install, S3 `prep-tls.yml`, S4 full
+benchmark, S5 rerun).
 
 Add `--limit rhel9-mongo` (etc.) to run one host at a time. Then SSH to each host and run the checks below. Set this
 once **in the same SSH session** (`echo "$M"` must print it; mongosh asks the admin password each time):
@@ -75,21 +77,19 @@ Screenshots: `docs/evidence-images/NN-<os>-<rule>-<result>.png` (next free numbe
 |------|----------|--------|--------|---------|----------|
 | S0 | `mongodb8_cis (main) was installed successfully` | | | | |
 | S1 | `ansible_distribution_major_version` = 8 / 9 / 10 on the right host | | | | |
-| S2 | `failed=0` | | | | |
-| S3 | `failed=0`, files in `/etc/pki/mongodb/` | | | | |
-| S4 | `failed=0`, one `Restart mongod` | | | | |
-| S5 | `changed=0 failed=0` (idempotent) | | | | |
+| S2 | `failed=0`, MongoDB installed, certificates in `/etc/pki/mongodb/`, one `Restart mongod` | | | | |
+| S3 | `changed=0 failed=0` (idempotent) | | | | |
 
 ## Per-rule checks on the host (CIS Audit procedure, RHEL commands)
 
-✅ pass · ➖ not applicable · 👤 reviewed by a person (Manual rule: record the decision).
+Results: Pass · N/A (not applicable) · Reviewed (Manual rule: a person records the decision) · Exception · Fail.
 
 | ID | L | Type | Check on the host | Pass when | R8 | R9 | R10 | Evidence |
 |----|---|------|-------------------|-----------|----|----|-----|----------|
 | 1.1 | 1 | M | `mongod --version \| head -1`; `dnf list --showduplicates mongodb-enterprise-server \| tail -1` | installed = latest 8.0.x (or a documented reason) | | | | |
 | 2.1 | 1 | A | `grep -A3 '^security' /etc/mongod.conf`; `sudo mongosh --quiet --port 27100 --tls --tlsCAFile /etc/pki/mongodb/ca.pem --tlsCertificateKeyFile /etc/pki/mongodb/server.pem --tlsAllowInvalidHostnames --eval 'db.adminCommand({listDatabases:1})'` | `authorization: enabled`; command **without** login fails: *requires authentication* | | | | |
 | 2.2 | 1 | A | `grep -A2 '^setParameter' /etc/mongod.conf` | `enableLocalhostAuthBypass: false` | | | | |
-| 2.3 | 2 | A | `grep -cE 'clusterRole\|clusterAuthMode' /etc/mongod.conf` | `0` → ➖ standalone, no cluster | | | | |
+| 2.3 | 2 | A | `grep -cE 'clusterRole\|clusterAuthMode' /etc/mongod.conf` | `0` → N/A, standalone, no cluster | | | | |
 | 3.1 | 1 | M | `$M --eval 'db.getSiblingDB("admin").system.users.find({"roles.role":{$in:["dbOwner","userAdmin","userAdminAnyDatabase"]},"roles.db":"admin"}).toArray()'` | `[]` | | | | |
 | 3.2 | 1 | M | `$M --eval 'db.getSiblingDB("admin").system.users.find({},{_id:1,roles:1}).toArray()'` | every user has only the roles it needs (lab: `frqadminDB` → `root@admin`) | | | | |
 | 3.3 | 1 | M | `ps -ef \| grep -E "mongos\|mongod" \| grep -v grep` | owner `mongod`, not root | | | | |
@@ -99,9 +99,9 @@ Screenshots: `docs/evidence-images/NN-<os>-<rule>-<result>.png` (next free numbe
 | 4.2 | 1 | A | same as 4.1 | same as 4.1 | | | | (4.1) |
 | 4.3 | 1 | A | same file: `mode: requireTLS`, `certificateKeyFile`, `CAFile`; plain `mongosh --port 27100 --eval 'db.runCommand({ping:1})'` | TLS required; plain connection **fails** | | | | |
 | 4.4 | 2 | A | `grep FIPSMode /etc/mongod.conf`; `sudo grep -i fips /var/log/mongodb/mongod.log \| tail -2` | `FIPSMode: true`; log shows FIPS mode active | | | | |
-| 4.5 | 2 | M | `grep -A3 enableEncryption /etc/mongod.conf` | lab: not enabled → 👤 accepted exception (no key management in the lab) | | | | |
+| 4.5 | 2 | M | `grep -A3 enableEncryption /etc/mongod.conf` | lab: not enabled → accepted exception (no key management in the lab) | | | | |
 | 5.1 | 1 | A | `grep -A3 '^auditLog' /etc/mongod.conf`; `sudo journalctl -t mongod -n 3` | `destination: syslog`; audit events in the journal | | | | |
-| 5.2 | 2 | M | `grep -A4 '^auditLog' /etc/mongod.conf` | no `filter` = all events audited (or the site's agreed filter) → 👤 | | | | (5.1) |
+| 5.2 | 2 | M | `grep -A4 '^auditLog' /etc/mongod.conf` | no `filter` = all events audited (or the site's agreed filter) → Reviewed | | | | (5.1) |
 | 5.3 | 2 | A | `grep -A6 '^systemLog' /etc/mongod.conf` | `quiet: false` | | | | |
 | 5.4 | 2 | A | same | `logAppend: true` | | | | (5.3) |
 | 6.1 | 1 | A | `grep -A2 '^net' /etc/mongod.conf`; `sudo ss -tlnp \| grep mongod`; `sudo semanage port -l \| grep mongod_port_t` | `port: 27100`; listening on 27100; 27100 labelled | | | | |
@@ -114,12 +114,12 @@ Screenshots: `docs/evidence-images/NN-<os>-<rule>-<result>.png` (next free numbe
 
 | | RHEL 8 | RHEL 9 | RHEL 10 |
 |---|---|---|---|
-| ✅ Pass | | | |
-| ➖ Not applicable | 2.3 | 2.3 | 2.3 |
-| 👤 Reviewed / accepted exception | | | |
-| ❌ Fail | | | |
+| Pass | | | |
+| Not applicable | 2.3 | 2.3 | 2.3 |
+| Reviewed / accepted exception | | | |
+| Fail | | | |
 
-**Verdict:** each host is compliant with CIS MongoDB 8 Benchmark v2.0.0 Level ☐1 ☐2, with the exceptions above.
+**Verdict:** each host is compliant with CIS MongoDB 8 Benchmark v2.0.0 Level [ ] 1 [ ] 2, with the exceptions above.
 Signed off by / date:
 
 Commands are taken from each recommendation's *Audit* section in the benchmark PDF (kept locally, never committed),

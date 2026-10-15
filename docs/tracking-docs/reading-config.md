@@ -98,7 +98,7 @@ content: "{{ discovered_mongod_conf | combine({'auditLog': {'destination': 'sysl
 | Merge `{'net': {'tls': {'mode': 'requireTLS'}}}` into `{'net': {'port': 27017}, ...}` | Result |
 |---|---|
 | `combine(...)` | `net: {tls: {mode: requireTLS}}` → **`port: 27017` is lost** |
-| `combine(..., recursive=true)` | `net: {port: 27017, tls: {mode: requireTLS}}` ✓ |
+| `combine(..., recursive=true)` | `net: {port: 27017, tls: {mode: requireTLS}}` OK |
 
 `to_nice_yaml(indent=2)` turns the dictionary back into YAML text for `copy`. Side effect: comments and key order
 of the original file are not kept (`backup: true` keeps the previous file next to it).
@@ -122,7 +122,7 @@ prelim         file: {storage, net}             dict: {storage, net}
 
 with set_fact:
 5.1            file = dict = {storage, net, auditLog: {destination}}
-5.2            file = dict = {storage, net, auditLog: {destination, filter}}     ✓
+5.2            file = dict = {storage, net, auditLog: {destination, filter}}     OK
 ```
 
 Re-reading the file (`slurp` + parse again) after each write would also work, but costs two tasks and a round
@@ -145,7 +145,7 @@ text, and text never equals a number. Tested on ansible-core 2.16.19 and 2.20.7:
 | `"27017" != 27017` | `True` | without `\| int`, 6.1's "not 27017" check would **pass** for a quoted `"27017"` |
 | `"47017" >= 1024` | error, play stops | text can't be compared with a number |
 | `combine({'net': {'port': port}})` | writes `port: '47017'` | quoted text in `mongod.conf` |
-| `combine({'net': {'port': port \| int}})` | writes `port: 47017` | ✅ |
+| `combine({'net': {'port': port \| int}})` | writes `port: 47017` | OK |
 
 So every place that compares or writes a port uses `| int` (6.1, the restart handler's `wait_for`). The same idea is
 why 6.2 compares limits with `| string`: systemd reports `64000` as text, and `64000` (number) vs `"64000"` (text)

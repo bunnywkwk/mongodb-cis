@@ -17,7 +17,7 @@ How to read a row:
 ## How to prove compliance
 
 Run the role, rerun it (`changed=0`), then check every rule on the host with its CIS Audit command:
-[compliance-test.md](compliance-test.md). How to pick a level and set site values: [README](../README.md).
+[compliance-test.md](../compliance-test.md). How to pick a level and set site values: [README](../README.md).
 
 ## How each row was derived from the PDF
 

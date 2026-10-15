@@ -7,8 +7,8 @@ One Ansible environment that runs this role against RHEL 8, 9 and 10 (D15).
 | | ansible-core 2.16 | 2.17 and newer |
 |---|---|---|
 | Target Python | 2.7, **3.6**–3.12 | 3.7+ (no Python 3.6) |
-| RHEL 8 (system Python 3.6) | ✅ | ❌ (`dnf` bindings exist only for 3.6) |
-| RHEL 9 (3.9), RHEL 10 (3.12) | ✅ | ✅ |
+| RHEL 8 (system Python 3.6) | Yes | No (`dnf` bindings exist only for 3.6) |
+| RHEL 9 (3.9), RHEL 10 (3.12) | Yes | Yes |
 | Controller Python | **3.10–3.12** | newer |
 
 So 2.16 is the one version that manages all three. It reached upstream end of life in July 2025 (no more security

@@ -53,8 +53,8 @@ Role work: `mongodump` with the admin login → check free space → `dnf` to th
 | Question | Answer |
 |----------|--------|
 | 1. Concrete fix | Partly: the steps are clear, but "appropriate version" is the organisation's call |
-| 2. Simple input | ❌ version + backup location + space check + credentials |
-| 3. Safe if wrong | ❌ every run with `latest` could upgrade and **restart the database at an unplanned time**; the role can't roll back a bad release |
+| 2. Simple input | No: version + backup location + space check + credentials |
+| 3. Safe if wrong | No: every run with `latest` could upgrade and **restart the database at an unplanned time**; the role can't roll back a bad release |
 | 4. Worth it | yes (new patches appear) |
 
 **Verdict:** report only. Upgrades belong in a change window, not in a hardening run that may be scheduled.
@@ -79,15 +79,15 @@ across the cluster** (`serial: 1`, secondaries first), plus `mongos` instances.
 | Question | Answer |
 |----------|--------|
 | 1. Concrete fix | yes, for a cluster |
-| 2. Simple input | ❌ cluster topology, certificates per member, restart order |
-| 3. Safe if wrong | ❌ a member that can't authenticate drops out of the cluster |
-| 4. Worth it | ❌ **no cluster**: the role targets a standalone `mongod` (design-decisions.md, Scope) |
+| 2. Simple input | No: cluster topology, certificates per member, restart order |
+| 3. Safe if wrong | No: a member that can't authenticate drops out of the cluster |
+| 4. Worth it | No: **no cluster**: the role targets a standalone `mongod` (design-decisions.md, Scope) |
 
 **Verdict:** reports `NOT APPLICABLE` on a standalone. **Revisit when:** the role supports replica sets/sharding.
 
 **Revised 2026-10-10 (D31):** adopted as x509 (CIS production method) behind `mongodb8_cis_rule_2_3` (off by default),
 applied only on a member (`sharding.clusterRole` or `replication.replSetName`); TLS comes from 4.3. Answers change:
-2 ✅ (a switch + optional member cert; run all members together), 4 ✅ for clusters. Rolling change without downtime
+2 Yes (a switch + optional member cert; run all members together), 4 Yes for clusters. Rolling change without downtime
 stays by hand.
 
 ---
@@ -115,9 +115,9 @@ mongodb8_cis_db_users_exclusive: false     # true = drop users not in the list?
 
 | Question | Answer |
 |----------|--------|
-| 1. Concrete fix | ❌ "appropriate" is the site's judgment |
-| 2. Simple input | ❌ nested list, a Vault secret per account, every account repeated |
-| 3. Safe if wrong | ❌ an app loses a role → outage; `mongodb_user` clears `authenticationRestrictions` on update unless repeated (D28 E2); "exclusive" mode deletes users |
+| 1. Concrete fix | No: "appropriate" is the site's judgment |
+| 2. Simple input | No: nested list, a Vault secret per account, every account repeated |
+| 3. Safe if wrong | No: an app loses a role → outage; `mongodb_user` clears `authenticationRestrictions` on update unless repeated (D28 E2); "exclusive" mode deletes users |
 | 4. Worth it | a fresh install has no users |
 
 **Verdict:** report only (every user and its roles). It would turn the hardening role into an account-management tool
@@ -125,7 +125,7 @@ whose input only the site's people can write.
 
 **Revised 2026-10-10 (D31):** adopted for fresh servers: `mongodb8_cis_users` (user, db, password, roles) creates
 accounts that don't exist and adds roles an account is missing. It never removes a role, changes a password or drops a
-user. Answers change: 1 ✅ (the site names the roles), 2 ✅ (one flat list), 3 ✅ (only adds).
+user. Answers change: 1 Yes (the site names the roles), 2 Yes (one flat list), 3 Yes (only adds).
 
 ---
 
@@ -146,8 +146,8 @@ PID/socket paths → SELinux relabel → restart.
 |----------|--------|
 | 1. Concrete fix | yes |
 | 2. Simple input | yes (one boolean) |
-| 3. Safe if wrong | ❌ one root-owned file the role doesn't know about (custom paths, sockets) and **mongod won't start** |
-| 4. Worth it | ❌ **the RPM already passes**: `User=mongod`, process owner `mongod` (D28 E4) |
+| 3. Safe if wrong | No: one root-owned file the role doesn't know about (custom paths, sockets) and **mongod won't start** |
+| 4. Worth it | No: **the RPM already passes**: `User=mongod`, process owner `mongod` (D28 E4) |
 
 **Verdict:** report only (PASS/FAIL). Only a hand-modified install fails, and that repair needs someone who knows which
 files the site added ([manual-remediation.md](manual-remediation.md) 3.3).
@@ -171,15 +171,15 @@ mongodb8_cis_revoke_role_privileges:
 
 | Question | Answer |
 |----------|--------|
-| 1. Concrete fix | ❌ "necessary" is the app team's judgment |
-| 2. Simple input | ❌ role + db + resource + actions per entry (3 levels of nesting) |
-| 3. Safe if wrong | ❌ the app silently loses an action it needs |
-| 4. Worth it | ❌ a fresh install has **no custom roles** (D28 E5) |
+| 1. Concrete fix | No: "necessary" is the app team's judgment |
+| 2. Simple input | No: role + db + resource + actions per entry (3 levels of nesting) |
+| 3. Safe if wrong | No: the app silently loses an action it needs |
+| 4. Worth it | No: a fresh install has **no custom roles** (D28 E5) |
 
 **Verdict:** report only (every custom role and its actions).
 
 **Revised 2026-10-06 (D30):** adopted in a simpler form: `mongodb8_cis_drop_custom_roles: ["shop.orderReader"]` drops
-whole roles the site names (CIS: *"eliminating unneeded roles"*). Answers change to 1 ✅ (the site names it), 2 ✅ (a
+whole roles the site names (CIS: *"eliminating unneeded roles"*). Answers change to 1 Yes (the site names it), 2 Yes (a
 name list), 3 partly (users lose that role; recreate by hand). Trimming single privileges stays manual.
 
 ---
@@ -198,9 +198,9 @@ mongodb8_cis_revoke_superuser_roles:       # accounts and which of the 8 roles t
 
 | Question | Answer |
 |----------|--------|
-| 1. Concrete fix | ❌ the title is **"Review"**; which admins are legitimate is a people decision |
+| 1. Concrete fix | No: the title is **"Review"**; which admins are legitimate is a people decision |
 | 2. Simple input | partly (accounts + roles) |
-| 3. Safe if wrong | ❌ revoking `root` or `userAdminAnyDatabase` from the wrong account can leave **no admin at all**; CIS 2.1 itself creates the admin with `root` |
+| 3. Safe if wrong | No: revoking `root` or `userAdminAnyDatabase` from the wrong account can leave **no admin at all**; CIS 2.1 itself creates the admin with `root` |
 | 4. Worth it | a fresh install has only the 2.1 admin |
 
 **Verdict:** report only. Unlike 3.1 (three named roles, *"drop them"*), 3.5 covers `root`, so a mistake is a lockout.
@@ -231,17 +231,17 @@ restart. Existing data: dump → empty dbPath → restart → restore (a migrati
 
 | Question | Answer |
 |----------|--------|
-| 1. Concrete fix | ❌ a procedure, not a setting (key design, KMIP, rotation) |
-| 2. Simple input | ❌ key management infrastructure (KMIP server + certificates) |
-| 3. Safe if wrong | ❌ **data loss**: *"MongoDB cannot encrypt existing data"* (E1); a lost key = unreadable data (E5); the keyfile method *"does not meet most regulatory key management guidelines"* (E2) |
+| 1. Concrete fix | No: a procedure, not a setting (key design, KMIP, rotation) |
+| 2. Simple input | No: key management infrastructure (KMIP server + certificates) |
+| 3. Safe if wrong | No: **data loss**: *"MongoDB cannot encrypt existing data"* (E1); a lost key = unreadable data (E5); the keyfile method *"does not meet most regulatory key management guidelines"* (E2) |
 | 4. Worth it | yes for regulated data |
 
 **Verdict:** report only; hand procedure with backups in [manual-remediation.md](manual-remediation.md) 4.5.
 **Revisit when:** a KMIP server is available (variant B, fresh installs only).
 
 **Revised 2026-10-10 (D31):** adopted for **new installs**: `mongodb8_cis_encryption` (KMIP or keyfile settings) is written in
-`section_4/cis_4.5.yml` (imported from `main.yml` before mongod's first start), only when dbPath has no data. Answers change: 1 ✅ (on an empty dbPath it is a
-setting), 3 ✅ (no data to lose; with data nothing is written). The key is never created by the role; its backup stays
+`section_4/cis_4.5.yml` (imported from `main.yml` before mongod's first start), only when dbPath has no data. Answers change: 1 Yes (on an empty dbPath it is a
+setting), 3 Yes (no data to lose; with data nothing is written). The key is never created by the role; its backup stays
 the site's job.
 
 ---

@@ -29,7 +29,7 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **1.1** (L1) | Manual, report | Prints the installed version and where to check for patches (mongodb.com/alerts). Never upgrades | — | 👤 REVIEW |
+| **1.1** (L1) | Manual, report | Prints the installed version and where to check for patches (mongodb.com/alerts). Never upgrades | — | REVIEW |
 
 - Why no upgrade: an upgrade restarts the database and needs a change window (D29).
 
@@ -41,9 +41,9 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **2.1** (L1) | Automated, **off** | Creates the admin (`root@admin`, as in CIS's remediation) **first**, then `security.authorization: enabled`, restart | `mongodb8_cis_rule_2_1: true`, `mongodb8_cis_admin_user`, `mongodb8_cis_admin_password` (Vault) | ❌ auth disabled |
-| **2.2** (L1) | Automated, **off** | Checks at least one user exists (lockout guard), then `setParameter.enableLocalhostAuthBypass: false`, restart | `mongodb8_cis_rule_2_2: true` | ❌ bypass on (default `true`) |
-| **2.3** (L2) | Automated, PATCH, off | `NOT APPLICABLE` on a standalone; on a replica set / shard / config server member: `security.clusterAuthMode: x509` + `net.tls.clusterFile` (needs 4.3) | `mongodb8_cis_rule_2_3`, `mongodb8_cis_cluster_file` | ➖ / 🔧 |
+| **2.1** (L1) | Automated, **off** | Creates the admin (`root@admin`, as in CIS's remediation) **first**, then `security.authorization: enabled`, restart | `mongodb8_cis_rule_2_1: true`, `mongodb8_cis_admin_user`, `mongodb8_cis_admin_password` (Vault) | FAIL: auth disabled |
+| **2.2** (L1) | Automated, **off** | Checks at least one user exists (lockout guard), then `setParameter.enableLocalhostAuthBypass: false`, restart | `mongodb8_cis_rule_2_2: true` | FAIL: bypass on (default `true`) |
+| **2.3** (L2) | Automated, PATCH, off | `NOT APPLICABLE` on a standalone; on a replica set / shard / config server member: `security.clusterAuthMode: x509` + `net.tls.clusterFile` (needs 4.3) | `mongodb8_cis_rule_2_3`, `mongodb8_cis_cluster_file` | N/A / applied on cluster members |
 
 **Variables in the code**
 
@@ -67,11 +67,11 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **3.1** (L1) | Manual + optional fix | Runs CIS's own query: accounts with `dbOwner`, `userAdmin` or `userAdminAnyDatabase` **in admin**. PASS if none; revokes those roles from accounts you list | `mongodb8_cis_revoke_admin_roles: ["admin.badadmin"]` | ✅ PASS (no users) |
-| **3.2** (L1) | Manual, report + site decision | Authorization state + every user with its roles; `mongodb8_cis_users` creates missing accounts and adds missing roles (never removes) | `mongodb8_cis_users` | 👤 REVIEW |
-| **3.3** (L1) | Manual, report | PASS if mongod's unit `User=` and the running process are not root | — | ✅ PASS (`mongod`) |
-| **3.4** (L1) | Manual, report + opt-in | Every **user-defined** role and its actions (built-in roles are fixed by MongoDB); drops the roles in `mongodb8_cis_drop_custom_roles` | — | 👤 0 roles |
-| **3.5** (L2) | Manual, report + opt-in | Users holding a superuser/admin role; revokes them from accounts in `mongodb8_cis_revoke_superuser_roles` (never the role's own admin) | — | 👤 REVIEW |
+| **3.1** (L1) | Manual + optional fix | Runs CIS's own query: accounts with `dbOwner`, `userAdmin` or `userAdminAnyDatabase` **in admin**. PASS if none; revokes those roles from accounts you list | `mongodb8_cis_revoke_admin_roles: ["admin.badadmin"]` | PASS (no users) |
+| **3.2** (L1) | Manual, report + site decision | Authorization state + every user with its roles; `mongodb8_cis_users` creates missing accounts and adds missing roles (never removes) | `mongodb8_cis_users` | REVIEW |
+| **3.3** (L1) | Manual, report | PASS if mongod's unit `User=` and the running process are not root | — | PASS (`mongod`) |
+| **3.4** (L1) | Manual, report + opt-in | Every **user-defined** role and its actions (built-in roles are fixed by MongoDB); drops the roles in `mongodb8_cis_drop_custom_roles` | — | REVIEW: 0 roles |
+| **3.5** (L2) | Manual, report + opt-in | Users holding a superuser/admin role; revokes them from accounts in `mongodb8_cis_revoke_superuser_roles` (never the role's own admin) | — | REVIEW |
 
 **Variables in the code**
 
@@ -98,11 +98,11 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **4.3** (L1) | Automated, on | Copies the two files from `_src` to `/etc/pki/mongodb/`, keeping their names (owner mongod, 0600), then `net.tls.mode: requireTLS` + `certificateKeyFile` + `CAFile`; `NOT APPLIED` until both `_src` are set. **Runs first** in Section 4 (D25) | `mongodb8_cis_tls_certificate_key_src`, `mongodb8_cis_tls_ca_src` | ❌ TLS off |
-| **4.1** (L2) | Automated | Adds `TLS1_0,TLS1_1` to `net.tls.disabledProtocols` (keeps others). TLS off → FAIL message, no write | — | ❌ FAIL (TLS off) |
-| **4.2** (L1) | Automated | Same key as 4.1 (CIS lists it at both levels) | — | ❌ FAIL (TLS off) |
-| **4.4** (L2) | Automated, **off** | `net.tls.FIPSMode: true` (needs TLS) | `mongodb8_cis_rule_4_4: true` | ❌ |
-| **4.5** (L2) | Manual, report | PASS if `security.enableEncryption`; shows KMIP or keyfile. Enabling it is done by hand (D34) | — | 👤 REVIEW (off) |
+| **4.3** (L1) | Automated, on | Copies the two files from `_src` to `/etc/pki/mongodb/`, keeping their names (owner mongod, 0600), then `net.tls.mode: requireTLS` + `certificateKeyFile` + `CAFile`; `NOT APPLIED` until both `_src` are set. **Runs first** in Section 4 (D25) | `mongodb8_cis_tls_certificate_key_src`, `mongodb8_cis_tls_ca_src` | FAIL: TLS off |
+| **4.1** (L2) | Automated | Adds `TLS1_0,TLS1_1` to `net.tls.disabledProtocols` (keeps others). TLS off → FAIL message, no write | — | FAIL (TLS off) |
+| **4.2** (L1) | Automated | Same key as 4.1 (CIS lists it at both levels) | — | FAIL (TLS off) |
+| **4.4** (L2) | Automated, **off** | `net.tls.FIPSMode: true` (needs TLS) | `mongodb8_cis_rule_4_4: true` | FAIL |
+| **4.5** (L2) | Manual, report | PASS if `security.enableEncryption`; shows KMIP or keyfile. Enabling it is done by hand (D34) | — | REVIEW (off) |
 
 **Variables in the code**
 
@@ -125,15 +125,15 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Log | Records | Where (role default) | Read it with |
 |-----|---------|----------------------|--------------|
-| 📓 Normal log (`systemLog`) | startup, errors, connections, slow queries | `/var/log/mongodb/mongod.log` | `sudo tail -f /var/log/mongodb/mongod.log` |
-| 🔒 Audit log (`auditLog`, Enterprise) | logins, user/role changes, dropped collections, failed access | syslog (journal) | `sudo journalctl -t mongod -f` |
+| Normal log (`systemLog`) | startup, errors, connections, slow queries | `/var/log/mongodb/mongod.log` | `sudo tail -f /var/log/mongodb/mongod.log` |
+| Audit log (`auditLog`, Enterprise) | logins, user/role changes, dropped collections, failed access | syslog (journal) | `sudo journalctl -t mongod -f` |
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **5.1** (L1) | Automated | Adds `auditLog` **only if missing** (an existing one is never changed) | `mongodb8_cis_audit_log` (default `{destination: syslog}`; for a file add `format` + `path`) | ✅ added (changed) |
-| **5.2** (L2) | Manual + optional fix | Shows the filter (none = everything audited); writes yours if set and auditing is on | `mongodb8_cis_audit_filter: '{ atype: { $in: [ "authenticate" ] } }'` | 👤 no filter |
-| **5.3** (L2) | Automated | Writes `systemLog.quiet: false` unless it is already explicitly `false`, so CIS's `grep quiet` finds it | — | ✅ added (changed) |
-| **5.4** (L2) | Automated | `systemLog.logAppend: true` if not set | — | ✅ PASS (RPM sets it) |
+| **5.1** (L1) | Automated | Adds `auditLog` **only if missing** (an existing one is never changed) | `mongodb8_cis_audit_log` (default `{destination: syslog}`; for a file add `format` + `path`) | added (changed) |
+| **5.2** (L2) | Manual + optional fix | Shows the filter (none = everything audited); writes yours if set and auditing is on | `mongodb8_cis_audit_filter: '{ atype: { $in: [ "authenticate" ] } }'` | REVIEW: no filter |
+| **5.3** (L2) | Automated | Writes `systemLog.quiet: false` unless it is already explicitly `false`, so CIS's `grep quiet` finds it | — | added (changed) |
+| **5.4** (L2) | Automated | `systemLog.logAppend: true` if not set | — | PASS (RPM sets it) |
 
 **Variables in the code**
 
@@ -158,9 +158,9 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **6.1** (L1) | Automated, **off** | Checks the port (1024–65535, not 27017), labels it `mongod_port_t` when SELinux is on, sets `net.port`, restart | `mongodb8_cis_rule_6_1: true`, `mongodb8_cis_port: 27100` | ❌ 27017 |
-| **6.2** (L2) | Manual + optional fix | PASS/REVIEW per limit vs CIS; writes a systemd drop-in if they differ | `mongodb8_cis_fix_resource_limits: true`, `mongodb8_cis_resource_limits` | ✅ PASS (RPM unit) |
-| **6.3** (L2) | Manual + optional fix | Shows `javascriptEnabled`; disables server-side JS if you say it isn't needed | `mongodb8_cis_javascript_needed: false` | 👤 on (default `true`) |
+| **6.1** (L1) | Automated, **off** | Checks the port (1024–65535, not 27017), labels it `mongod_port_t` when SELinux is on, sets `net.port`, restart | `mongodb8_cis_rule_6_1: true`, `mongodb8_cis_port: 27100` | FAIL: 27017 |
+| **6.2** (L2) | Manual + optional fix | PASS/REVIEW per limit vs CIS; writes a systemd drop-in if they differ | `mongodb8_cis_fix_resource_limits: true`, `mongodb8_cis_resource_limits` | PASS (RPM unit) |
+| **6.3** (L2) | Manual + optional fix | Shows `javascriptEnabled`; disables server-side JS if you say it isn't needed | `mongodb8_cis_javascript_needed: false` | REVIEW: on (default `true`) |
 
 **Variables in the code**
 
@@ -187,8 +187,8 @@ Every rule's `when:` starts with its toggle and its level (`mongodb8_cis_rule_<i
 
 | Rule | Type | Role does | You can set | Fresh install |
 |------|------|-----------|-------------|---------------|
-| **7.1** (L1) | Manual + optional fix | PASS/FAIL per `keyFile`, TLS key and CA file (`0600`/`0400`, owner **and** group = service user), or NOT APPLICABLE | `mongodb8_cis_fix_key_file_permissions: true` | ➖ no files yet |
-| **7.2** (L1) | Manual + optional fix | PASS/FAIL for the dbPath directory (`0770`, owner/group = service user) | `mongodb8_cis_fix_db_path_permissions: true` | ❌ FAIL (RPM: `0755`) |
+| **7.1** (L1) | Manual + optional fix | PASS/FAIL per `keyFile`, TLS key and CA file (`0600`/`0400`, owner **and** group = service user), or NOT APPLICABLE | `mongodb8_cis_fix_key_file_permissions: true` | N/A: no files yet |
+| **7.2** (L1) | Manual + optional fix | PASS/FAIL for the dbPath directory (`0770`, owner/group = service user) | `mongodb8_cis_fix_db_path_permissions: true` | FAIL (RPM: `0755`) |
 
 **Variables in the code**
 
