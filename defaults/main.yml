@@ -80,7 +80,7 @@ mongodb8_cis_rule_4_2: true
 # 4.3 Require TLS
 # WARNING: clients without TLS and a certificate from your CA can no longer connect
 mongodb8_cis_rule_4_3: true
-mongodb8_cis_tls_certificate_key_src: ""    # on the control node: server certificate + private key in one PEM, e.g. files/pki/{{ inventory_hostname }}.pem
+mongodb8_cis_tls_certificate_key_src: ""    # on the control node: server certificate + private key in one PEM, e.g. files/pki/server.pem
 mongodb8_cis_tls_ca_src: ""                 # on the control node: certificate of the CA that signed it, e.g. files/pki/ca.pem
 mongodb8_cis_tls_certificate_key_file: ""   # on the server, e.g. /etc/pki/mongodb/server.pem
 mongodb8_cis_tls_ca_file: ""                # on the server, e.g. /etc/pki/mongodb/ca.pem
