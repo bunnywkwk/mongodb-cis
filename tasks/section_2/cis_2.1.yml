@@ -22,6 +22,7 @@
         transform: raw
       register: discovered_2_1_admin
       changed_when: false
+      check_mode: false   # only reads; mongodb_shell has no check mode
 
     # CIS remediation: create a user administrator, then enable authorization.
     - name: "2.1 | PATCH | Ensure Authentication is configured | Create the admin"

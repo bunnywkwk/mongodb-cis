@@ -18,6 +18,7 @@
         transform: json
       register: discovered_3_1_users
       changed_when: false
+      check_mode: false   # only reads; mongodb_shell has no check mode
 
     - name: "3.1 | AUDIT | Ensure least privilege for database accounts | Report"
       ansible.builtin.debug:

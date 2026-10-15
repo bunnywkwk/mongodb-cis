@@ -1,6 +1,7 @@
 ---
 # Every rule above added its settings to mongodb8_cis_conf; mongod.conf is written once, and mongod restarted once.
 - name: "POST | PATCH | Write mongod.conf"
+  when: mongodb8_cis_conf != discovered_mongod_conf   # a rule changed a setting
   ansible.builtin.copy:
     dest: "{{ mongodb8_cis_conf_path }}"
     content: "{{ mongodb8_cis_conf | to_nice_yaml(indent=2) }}"

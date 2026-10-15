@@ -20,6 +20,7 @@
         transform: json
       register: discovered_3_5_users
       changed_when: false
+      check_mode: false   # only reads; mongodb_shell has no check mode
 
     - name: "3.5 | AUDIT | Review Superuser/Admin Roles | Report"
       ansible.builtin.debug:

@@ -16,6 +16,7 @@
         transform: json
       register: discovered_3_4_roles
       changed_when: false
+      check_mode: false   # only reads; mongodb_shell has no check mode
 
     - name: "3.4 | AUDIT | Ensure that each role for each MongoDB database is needed and grants only the necessary privileges | Report"
       ansible.builtin.debug:

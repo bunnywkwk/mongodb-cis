@@ -15,7 +15,7 @@ organization provides a value or list. **Report** = the role reports; a person d
 | 2.2 | 1 | Automated | No localhost authentication bypass | Apply | |
 | 2.3 | 2 | Automated | Authentication in the sharded cluster | Apply (cluster members only) | |
 | 3.1 | 1 | Manual | Least privilege for database accounts | On value | Accounts to revoke |
-| 3.2 | 1 | Manual | Role-based access control | On value | Accounts and roles |
+| 3.2 | 1 | Manual | Role-based access control | Report | |
 | 3.3 | 1 | Manual | Non-privileged service account | Report | |
 | 3.4 | 1 | Manual | Only necessary roles and privileges | On value | Roles to drop |
 | 3.5 | 2 | Manual | Review superuser and admin roles | On value | Accounts to revoke |
@@ -37,8 +37,8 @@ organization provides a value or list. **Report** = the role reports; a person d
 | Mode | Count | Recommendations |
 |------|-------|-----------------|
 | Apply | 15 | 2.1, 2.2, 2.3, 4.1, 4.2, 4.3, 4.4, 5.1, 5.3, 5.4, 6.1, 6.2, 6.3, 7.1, 7.2 |
-| On value | 5 | 3.1, 3.2, 3.4, 3.5, 5.2 |
-| Report | 3 | 1.1, 3.3, 4.5 |
+| On value | 4 | 3.1, 3.4, 3.5, 5.2 |
+| Report | 4 | 1.1, 3.2, 3.3, 4.5 |
 
 ## Key points
 
